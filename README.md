@@ -14,8 +14,20 @@ does not contain an answer.
   Sthana and the later Chikitsa lessons are not included.
 - **Transcription:** Source Library, https://sourcelibrary.org/book/69ef217fb3e2d3a0927f3054
   — licensed **CC BY-SA 4.0**.
-- The source file is **not** included in this repository. Download it and place
-  it at `data/raw/charaka-samhita-ocr.txt` (verification script: Phase 1).
+- **Original scan:** archive.org identifier `BIUSante_47357` (Bibliothèque
+  interuniversitaire de santé, Paris).
+- The source file is **not** included in this repository. To get it:
+  1. Open the Source Library link above and use **Download** to save the
+     plain-text (.txt) version.
+  2. Save it as `data/raw/charaka-samhita-ocr.txt`.
+  3. Run `python -m scripts.verify_source`. It checks the page count (1988) and a
+     SHA-256 of the content from `[Page 1]` onward. The download header is
+     excluded because it contains the download date.
+
+## Pipeline
+
+    python -m scripts.verify_source   # check the source file
+    python -m src.ingest              # -> data/processed/pages.jsonl + quality report
 
 ## Setup (Windows / PowerShell)
 
@@ -27,4 +39,4 @@ does not contain an answer.
 
 ## Status
 
-Phase 0 — project structure.
+Phase 1 — source verification and page ingestion.

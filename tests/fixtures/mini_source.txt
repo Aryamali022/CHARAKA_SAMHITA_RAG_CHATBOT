@@ -1,0 +1,111 @@
+════════════════════════════════════════════════════════════
+SOURCE LIBRARY
+════════════════════════════════════════════════════════════
+
+Title: Charaka-Samhita (test fixture)
+Downloaded: 2026-01-01
+
+────────────────────────────────────────────────────────────
+
+[Page 1]
+
+<scan-quality>fair</scan-quality>
+<language>English</language>
+<script>printed</script>
+<page-type>title-page</page-type>
+<page-num>N/A</page-num>
+
+# CHARAKA-SAMHITA
+
+->TRANSLATED INTO ENGLISH.<-
+
+<vocab>Charaka-Samhita, title</vocab>
+
+────────────────────────────────────────────────────────────
+
+[Page 2]
+
+<scan-quality>good</scan-quality>
+<language>English, Sanskrit</language>
+<script>printed</script>
+<page-type>text</page-type>
+<page-num>1</page-num>
+<header>CHARAKA-SAMHITĀ.</header>
+
+# CHARAKA-SAMHITĀ.
+
+---
+
+## THE PLACE OF APHORISMS.
+
+### LESSON I.
+
+So then we will explain the lesson about **Longevity**.*<sup>1</sup>
+
+Oil subjugates <unclear>wind</unclear>, Ghee subjugates bile.†
+
+*(Here is a verse containing a summary.)*
+
+<image-desc size="small" type="decorative" significance="low">A divider.</image-desc>
+
+---
+
+* Longevity is *Ayu* in the original.—T.
+
+† Bile is *pitta*.—T.
+
+<note>12</note>
+
+<margin>a. Vide note b in p. 8.</margin>
+
+<vocab>Ayu, pitta, wind, bile</vocab>
+
+────────────────────────────────────────────────────────────
+
+[Page 3]
+
+<scan-quality>good</scan-quality>
+<language>English</language>
+<script>printed</script>
+<page-type>blank</page-type>
+<warning>This page is blank.</warning>
+
+<vocab></vocab>
+
+────────────────────────────────────────────────────────────
+
+[Page 4]
+
+<scan-quality>good</scan-quality>
+<language>English</language>
+<script>printed</script>
+<page-type>text</page-type>
+<header>CHARAKA-SAMHITA.</header>
+
+Honey subjugates phlegm when it is constantly used in proper measure.
+
+* A footnote with no rule above it.—T.
+
+<vocab>honey, phlegm</vocab>
+
+────────────────────────────────────────────────────────────
+
+[Page 5]
+
+<scan-quality>good</scan-quality>
+<language>English</language>
+<script>printed</script>
+<page-type>text</page-type>
+<page-num>3</page-num>
+
+Short.
+
+<vocab>test</vocab>
+
+────────────────────────────────────────────────────────────
+
+════════════════════════════════════════════════════════════
+END OF DOCUMENT
+
+Source: https://sourcelibrary.org/book/test
+════════════════════════════════════════════════════════════
