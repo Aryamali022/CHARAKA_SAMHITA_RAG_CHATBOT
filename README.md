@@ -29,6 +29,7 @@ does not contain an answer.
     python -m scripts.verify_source   # check the source file
     python -m src.ingest              # -> data/processed/pages.jsonl + quality report
     python -m src.structure           # -> data/processed/lesson_pages.jsonl + structure.json
+    python -m src.chunk               # -> data/processed/chunks.jsonl
 
 **Structure (Phase 2).** The translation prints the divisions in this order:
 Sutra, Vimana, Sharira, Indriya, Nidana, Chikitsa (lessons I–XXII), 88 lessons
@@ -38,6 +39,16 @@ wrapper pages (press opinions, notices, adverts) that the transcription marks
 as text. A small, explicit list (`LESSON_START_FIXES`) covers lesson starts the
 transcription leaves unmarked or misnumbered. The run fails if any lesson is
 missing. Check `data/processed/structure.json` for the page span of each lesson.
+
+**Chunks (Phase 3).** `src/chunk.py` cuts each lesson into passages of at most
+300 words (a lesson's short last piece may make one a little longer). A chunk
+never crosses a lesson, so its citation is always one lesson plus its pages.
+Pages are read as continuous text: sentences and hyphenated words broken by a
+page break are joined. Whole paragraphs are kept together, and a short
+paragraph is repeated at the start of the next chunk as overlap. The
+translator's footnotes become separate chunks of kind `note`, whose
+`attribution` says they are not part of the Charaka Samhita. Answers that use
+them must tell the user so.
 
 ## Setup (Windows / PowerShell)
 
@@ -51,3 +62,4 @@ missing. Check `data/processed/structure.json` for the page span of each lesson.
 
 Phase 1 — source verification and page ingestion.
 Phase 2 — sthana / lesson structure.
+Phase 3 — chunking.
