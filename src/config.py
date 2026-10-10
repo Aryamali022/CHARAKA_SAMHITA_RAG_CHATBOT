@@ -37,3 +37,8 @@ PAGES_PATH = PROCESSED_DIR / "pages.jsonl"
 LESSON_PAGES_PATH = PROCESSED_DIR / "lesson_pages.jsonl"
 STRUCTURE_PATH = PROCESSED_DIR / "structure.json"
 CHUNKS_PATH = PROCESSED_DIR / "chunks.jsonl"
+
+# --- Search index (Phase 4) ---
+MODELS_DIR = STORAGE_DIR / "models"                 # downloaded embedding model
+INDEX_DIR = STORAGE_DIR / "index"                   # chunk embeddings + metadata
+EVAL_QUESTIONS_PATH = DATA_DIR / "eval" / "retrieval_questions.jsonl"

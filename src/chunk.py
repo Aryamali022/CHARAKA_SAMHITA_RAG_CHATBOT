@@ -8,8 +8,11 @@ Method: structure-aware paragraph packing.
 - The pages of a lesson are read as one continuous text: a paragraph cut by
   a page break (no full stop at the end of the page) is joined back together,
   and a word hyphenated across the break ("ac-" + "cording") is rejoined.
-- Whole paragraphs are packed into chunks of at most MAX_WORDS. Only a single
+- Whole paragraphs are packed into chunks that fit the embedding model:
+  context line + passage <= MAX_TOKENS tokens of its tokenizer. Only a single
   paragraph longer than that is split, at sentence ends where possible.
+  (Sizes are measured in tokens, not words: Sanskrit words with diacritics
+  split into many tokens, so a word limit cannot guarantee the fit.)
 - The last paragraph of a chunk is repeated at the start of the next one when
   it is short, so an idea on a boundary appears whole at least once.
 - The translator's footnotes are chunked separately, as kind "note", with an
@@ -27,15 +30,17 @@ import statistics
 from collections import Counter
 from dataclasses import asdict, dataclass
 from pathlib import Path
+from typing import Callable
 
 from src import config
 from src.structure import STHANAS, LessonPage, lesson_label, load_lesson_pages
 
-# ~1.4 tokens per word for this text, so a 300-word chunk plus its context
-# line stays under the 512-token input limit of common embedding models.
-MAX_WORDS = 300
-MIN_WORDS = 60       # a lesson's last chunk shorter than this joins the one before
-OVERLAP_WORDS = 60   # longest paragraph repeated at the start of the next chunk
+# Sizes are in units of a `measure` function: tokens of the embedding model in
+# the real pipeline (see src/embedder.py), words in the unit tests.
+Measure = Callable[[str], int]
+MAX_TOKENS = 512      # embedding model input limit, for context line + passage
+SPECIAL_TOKENS = 2    # [CLS] and [SEP], added by the model's tokenizer
+OVERLAP_TOKENS = 100  # longest paragraph repeated at the start of the next chunk
 
 KINDS = {
     # kind: (field of LessonPage, attribution shown with every answer that uses it)
@@ -66,6 +71,7 @@ class Chunk:
     context: str                # one line naming the lesson; prepend it for embedding
     text: str                   # the book's own words
     word_count: int
+    size: int                   # embedding_text() as measured when chunking (tokens)
 
 
 @dataclass
@@ -103,67 +109,74 @@ def lesson_paragraphs(records: list[LessonPage], field: str) -> list[Paragraph]:
     return paragraphs
 
 
-def _split_words(text: str, max_words: int) -> list[str]:
-    words = text.split()
-    return [" ".join(words[i:i + max_words]) for i in range(0, len(words), max_words)]
+def _split_words(text: str, limit: int, measure: Measure) -> list[str]:
+    pieces: list[list[str]] = [[]]
+    size = 0
+    for word in text.split():
+        word_size = measure(word)
+        if pieces[-1] and size + word_size > limit:
+            pieces.append([])
+            size = 0
+        pieces[-1].append(word)
+        size += word_size
+    return [" ".join(words) for words in pieces]
 
 
-def split_long_paragraph(paragraph: Paragraph, max_words: int = MAX_WORDS) -> list[Paragraph]:
-    """Split a paragraph longer than max_words at sentence ends (words as a last resort)."""
-    if word_count(paragraph.text) <= max_words:
+def split_long_paragraph(paragraph: Paragraph, limit: int, measure: Measure) -> list[Paragraph]:
+    """Split a paragraph larger than limit at sentence ends (words as a last resort).
+
+    Sizes add up across whitespace (true for word counts and for the BERT-style
+    tokenizer of the embedding model), so pieces are sized by summing.
+    """
+    if measure(paragraph.text) <= limit:
         return [paragraph]
     pieces: list[str] = []
     current: list[str] = []
+    size = 0
     for sentence in SENTENCE_SPLIT_RE.split(paragraph.text):
-        for part in _split_words(sentence, max_words):
-            if current and word_count(" ".join(current + [part])) > max_words:
+        for part in _split_words(sentence, limit, measure):
+            part_size = measure(part)
+            if current and size + part_size > limit:
                 pieces.append(" ".join(current))
-                current = []
+                current, size = [], 0
             current.append(part)
+            size += part_size
     pieces.append(" ".join(current))
     return [Paragraph(piece, paragraph.pages) for piece in pieces]
 
 
-def pack(paragraphs: list[Paragraph], max_words: int = MAX_WORDS, min_words: int = MIN_WORDS,
-         overlap_words: int = OVERLAP_WORDS) -> list[list[Paragraph]]:
-    """Group paragraphs into chunks of at most max_words.
-
-    The only chunks that may be longer are a lesson's last chunk, when a short
-    tail (under min_words) has been joined to it.
-    """
-    groups: list[tuple[list[Paragraph], int]] = []   # (paragraphs, how many are carried over)
+def pack(paragraphs: list[Paragraph], limit: int, measure: Measure,
+         overlap: int = OVERLAP_TOKENS) -> list[list[Paragraph]]:
+    """Group paragraphs into chunks of at most limit (each paragraph must fit on its own)."""
+    sizes = {id(p): measure(p.text) for p in paragraphs}
+    groups: list[list[Paragraph]] = []
     current: list[Paragraph] = []
-    carried = 0
     for paragraph in paragraphs:
-        size = word_count(paragraph.text)
-        if current and sum(word_count(p.text) for p in current) + size > max_words:
-            groups.append((current, carried))
+        size = sizes[id(paragraph)]
+        if current and sum(sizes[id(p)] for p in current) + size > limit:
+            groups.append(current)
             last = current[-1]
-            last_size = word_count(last.text)
-            keep = last_size <= overlap_words and last_size + size <= max_words
-            current, carried = ([last], 1) if keep else ([], 0)
+            keep = sizes[id(last)] <= overlap and sizes[id(last)] + size <= limit
+            current = [last] if keep else []
         current.append(paragraph)
     if current:
-        groups.append((current, carried))
-
-    if len(groups) > 1:
-        tail, tail_carried = groups[-1]
-        if sum(word_count(p.text) for p in tail[tail_carried:]) < min_words:
-            groups.pop()
-            groups[-1][0].extend(tail[tail_carried:])
-    return [group for group, _ in groups]
+        groups.append(current)
+    return groups
 
 
-def chunk_lesson(records: list[LessonPage], kind: str) -> list[Chunk]:
+def chunk_lesson(records: list[LessonPage], kind: str, measure: Measure,
+                 max_size: int = MAX_TOKENS) -> list[Chunk]:
     field, attribution = KINDS[kind]
     first = records[0]
-    paragraphs = [piece for p in lesson_paragraphs(records, field) for piece in split_long_paragraph(p)]
-    printed = {r.scan_page: r.printed_page for r in records}
     label = lesson_label(first.sthana, first.lesson)
     context = f"Charaka Samhita, {label}" + (" - translator's note" if kind == "note" else "")
+    limit = max_size - SPECIAL_TOKENS - measure(context)   # room left for the passage
+    paragraphs = [piece for p in lesson_paragraphs(records, field)
+                  for piece in split_long_paragraph(p, limit, measure)]
+    printed = {r.scan_page: r.printed_page for r in records}
 
     chunks = []
-    for number, group in enumerate(pack(paragraphs), 1):
+    for number, group in enumerate(pack(paragraphs, limit, measure), 1):
         pages = sorted({page for p in group for page in p.pages})
         text = "\n\n".join(p.text for p in group)
         chunks.append(Chunk(
@@ -172,11 +185,13 @@ def chunk_lesson(records: list[LessonPage], kind: str) -> list[Chunk]:
             sthana=first.sthana, lesson=first.lesson, lesson_title=first.lesson_title,
             scan_pages=pages, printed_pages=[printed[p] for p in pages if printed[p]],
             context=context, text=text, word_count=word_count(text),
+            size=measure(f"{context}\n\n{text}") + SPECIAL_TOKENS,
         ))
     return chunks
 
 
-def build_chunks(records: list[LessonPage]) -> list[Chunk]:
+def build_chunks(records: list[LessonPage], measure: Measure,
+                 max_size: int = MAX_TOKENS) -> list[Chunk]:
     by_lesson: dict[tuple[str, int], list[LessonPage]] = {}
     for record in records:
         by_lesson.setdefault((record.sthana, record.lesson), []).append(record)
@@ -184,7 +199,7 @@ def build_chunks(records: list[LessonPage]) -> list[Chunk]:
     for lesson_records in by_lesson.values():
         lesson_records.sort(key=lambda r: r.scan_page)
         for kind in KINDS:
-            chunks.extend(chunk_lesson(lesson_records, kind))
+            chunks.extend(chunk_lesson(lesson_records, kind, measure, max_size))
     return chunks
 
 
@@ -203,11 +218,11 @@ def load_chunks(path: Path = config.CHUNKS_PATH) -> list[Chunk]:
 def print_report(chunks: list[Chunk]) -> None:
     for kind in KINDS:
         own = [c for c in chunks if c.kind == kind]
-        sizes = [c.word_count for c in own]
-        over = sum(size > MAX_WORDS for size in sizes)
-        print(f"{kind:<4} chunks: {len(own):>5}  words min {min(sizes)}, "
-              f"median {statistics.median(sizes):.0f}, max {max(sizes)} "
-              f"({over} over {MAX_WORDS}: lesson tails)")
+        words = [c.word_count for c in own]
+        tokens = [c.size for c in own]
+        print(f"{kind:<4} chunks: {len(own):>5}  words median {statistics.median(words):.0f} "
+              f"(max {max(words)}), tokens median {statistics.median(tokens):.0f} "
+              f"(max {max(tokens)} of {MAX_TOKENS})")
     per_sthana = Counter((c.sthana, c.kind) for c in chunks)
     for sthana in STHANAS:
         print(f"  {sthana.name:<16}: {per_sthana[(sthana.key, 'text')]:>4} text, "
@@ -227,7 +242,8 @@ def main(argv: list[str] | None = None) -> int:
         print("Run first: python -m src.structure")
         return 1
 
-    chunks = build_chunks(load_lesson_pages(args.lesson_pages))
+    from src.embedder import Embedder   # loads the model (downloads it on first use)
+    chunks = build_chunks(load_lesson_pages(args.lesson_pages), Embedder().count_tokens)
     write_chunks(chunks, args.out)
     print_report(chunks)
     print(f"\nWrote {len(chunks)} chunks to {args.out}")

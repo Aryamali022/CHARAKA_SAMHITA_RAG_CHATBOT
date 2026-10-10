@@ -1,0 +1,52 @@
+{"id": "q01", "style": "direct", "question": "Which natural urges should never be suppressed?", "lessons": [["sutra", 7]]}
+{"id": "q02", "style": "direct", "question": "What are the three desires that every person should pursue?", "lessons": [["sutra", 11]]}
+{"id": "q03", "style": "direct", "question": "How many bones are there in the human body?", "lessons": [["sharira", 7]]}
+{"id": "q04", "style": "direct", "question": "What are the ten seats of life in the body?", "lessons": [["sutra", 29]]}
+{"id": "q05", "style": "direct", "question": "How should a person divide the stomach when taking a meal?", "lessons": [["vimana", 2]]}
+{"id": "q06", "style": "direct", "question": "What causes epidemics that destroy cities and towns?", "lessons": [["vimana", 3]]}
+{"id": "q07", "style": "direct", "question": "Which dreams foretell death?", "lessons": [["indriya", 5]]}
+{"id": "q08", "style": "direct", "question": "What are the four feet of treatment: physician, drugs, attendant and patient?", "lessons": [["sutra", 9]]}
+{"id": "q09", "style": "direct", "question": "How are curable diseases distinguished from incurable ones?", "lessons": [["sutra", 10]]}
+{"id": "q10", "style": "direct", "question": "What are the merits and faults of wind in the body?", "lessons": [["sutra", 12]]}
+{"id": "q11", "style": "direct", "question": "How should oils and ghee be used in oleation therapy?", "lessons": [["sutra", 13]]}
+{"id": "q12", "style": "direct", "question": "What are the methods of sweda or fomentation?", "lessons": [["sutra", 14]]}
+{"id": "q13", "style": "direct", "question": "What regimen should be followed in each season?", "lessons": [["sutra", 6]]}
+{"id": "q14", "style": "direct", "question": "What diseases arise from santarpana or over-nutrition?", "lessons": [["sutra", 23]]}
+{"id": "q15", "style": "direct", "question": "What are langhana (reducing) and brimhana (nourishing) therapies?", "lessons": [["sutra", 22]]}
+{"id": "q16", "style": "direct", "question": "What diseases are caused by vitiated blood?", "lessons": [["sutra", 24]]}
+{"id": "q17", "style": "direct", "question": "What is the proper measure of food?", "lessons": [["sutra", 5], ["vimana", 2]]}
+{"id": "q18", "style": "direct", "question": "What are the terms of debate such as proposition, reason and example?", "lessons": [["vimana", 8]]}
+{"id": "q19", "style": "direct", "question": "What are the ducts or srotas of the body?", "lessons": [["vimana", 5]]}
+{"id": "q20", "style": "direct", "question": "How is the embryo formed in the womb?", "lessons": [["sharira", 3], ["sharira", 4]]}
+{"id": "q21", "style": "direct", "question": "How should a new-born child be cared for?", "lessons": [["sharira", 8]]}
+{"id": "q22", "style": "direct", "question": "What changes in complexion and voice indicate approaching death?", "lessons": [["indriya", 1]]}
+{"id": "q23", "style": "direct", "question": "What are the causes of fever?", "lessons": [["nidana", 1], ["chikitsa", 3]]}
+{"id": "q24", "style": "direct", "question": "What are the causes of insanity?", "lessons": [["nidana", 7], ["chikitsa", 9], ["sutra", 24]], "note": "Sutra 24 added after review: it describes the symptoms and kinds of insanity"}
+{"id": "q25", "style": "direct", "question": "What is Rasayana and how are Amalaka and Haritaki used for rejuvenation?", "lessons": [["chikitsa", 1]]}
+{"id": "q26", "style": "direct", "question": "What are the Vajikarana or aphrodisiac preparations?", "lessons": [["chikitsa", 2]]}
+{"id": "q27", "style": "direct", "question": "How are piles treated?", "lessons": [["chikitsa", 14]]}
+{"id": "q28", "style": "direct", "question": "What is the treatment of diarrhoea (atisara)?", "lessons": [["chikitsa", 19]]}
+{"id": "q29", "style": "direct", "question": "How is vomiting treated?", "lessons": [["chikitsa", 20]]}
+{"id": "q30", "style": "direct", "question": "What is the treatment of erysipelas (visarpa)?", "lessons": [["chikitsa", 21]]}
+{"id": "q31", "style": "direct", "question": "How is excessive thirst treated?", "lessons": [["chikitsa", 22]]}
+{"id": "q32", "style": "direct", "question": "What is the treatment of cough?", "lessons": [["chikitsa", 18]]}
+{"id": "q33", "style": "direct", "question": "How are hiccup and asthma treated?", "lessons": [["chikitsa", 17]]}
+{"id": "q34", "style": "direct", "question": "How is leprosy (kushtha) treated?", "lessons": [["chikitsa", 7], ["nidana", 5]]}
+{"id": "q35", "style": "direct", "question": "What is Pandu or chlorosis and how is it treated?", "lessons": [["chikitsa", 16]]}
+{"id": "q36", "style": "direct", "question": "What is Rajayakshma or consumption?", "lessons": [["chikitsa", 8], ["nidana", 6]]}
+{"id": "q37", "style": "direct", "question": "What are the causes and kinds of Gulma?", "lessons": [["nidana", 3], ["chikitsa", 5]]}
+{"id": "q38", "style": "direct", "question": "What are the kinds of Prameha?", "lessons": [["nidana", 4], ["chikitsa", 6]]}
+{"id": "q39", "style": "direct", "question": "How is Grahani disease treated?", "lessons": [["chikitsa", 15]]}
+{"id": "q40", "style": "direct", "question": "How is epilepsy treated?", "lessons": [["chikitsa", 10], ["nidana", 8]]}
+{"id": "q41", "style": "direct", "question": "How are swellings treated?", "lessons": [["chikitsa", 12]]}
+{"id": "q42", "style": "direct", "question": "How is Raktapitta (bleeding from bile) treated?", "lessons": [["chikitsa", 4], ["nidana", 2]]}
+{"id": "q43", "style": "paraphrase", "question": "Why is it harmful to hold back the need to pass urine or to sneeze?", "lessons": [["sutra", 7]]}
+{"id": "q44", "style": "paraphrase", "question": "What happens to people who eat too much heavy, rich food and do no exercise?", "lessons": [["sutra", 23]]}
+{"id": "q45", "style": "paraphrase", "question": "Which signs in a sick person show that he will soon die?", "lessons": [["indriya", 1], ["indriya", 2], ["indriya", 3], ["indriya", 4], ["indriya", 5], ["indriya", 6], ["indriya", 7], ["indriya", 8], ["indriya", 9], ["indriya", 10], ["indriya", 11], ["indriya", 12]]}
+{"id": "q46", "style": "paraphrase", "question": "What makes someone a good doctor?", "lessons": [["sutra", 9], ["sutra", 16], ["sutra", 29]]}
+{"id": "q47", "style": "paraphrase", "question": "Why do the people of a whole region fall ill at the same time?", "lessons": [["vimana", 3]]}
+{"id": "q48", "style": "paraphrase", "question": "Which foods are good for health and which are harmful?", "lessons": [["sutra", 25], ["sutra", 26], ["sutra", 27], ["sutra", 28]]}
+{"id": "q49", "style": "paraphrase", "question": "How can an old person regain youth and strength?", "lessons": [["chikitsa", 1]]}
+{"id": "q50", "style": "paraphrase", "question": "What should a woman do to have a healthy child?", "lessons": [["sharira", 8], ["sharira", 2], ["sharira", 4]]}
+{"id": "q51", "style": "paraphrase", "question": "Why do people lose their mind and behave strangely?", "lessons": [["nidana", 7], ["chikitsa", 9], ["sutra", 24]], "note": "Sutra 24 added after review: it describes the symptoms and kinds of insanity"}
+{"id": "q52", "style": "paraphrase", "question": "What should someone do when they cannot stop passing loose stools?", "lessons": [["chikitsa", 19]]}
