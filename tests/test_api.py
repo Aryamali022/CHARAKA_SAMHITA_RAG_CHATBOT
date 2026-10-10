@@ -126,6 +126,15 @@ def test_model_failure_during_ask_is_503(retriever):
     assert response.status_code == 503 and "Rate limit" in response.json()["detail"]
 
 
+def test_built_frontend_is_served_next_to_the_api(retriever, tmp_path, monkeypatch):
+    import src.api
+    (tmp_path / "index.html").write_text("<h1>Charaka Samhita Chatbot</h1>", encoding="utf-8")
+    monkeypatch.setattr(src.api, "FRONTEND_DIST", tmp_path)
+    with client_with(retriever, FakeLLM()) as client:
+        assert "Charaka Samhita Chatbot" in client.get("/").text
+        assert client.get("/api/health").json()["status"] == "ok"   # the API still wins
+
+
 def test_browser_page_from_the_react_dev_server_is_allowed(retriever):
     with client_with(retriever) as client:
         response = client.options("/api/search", headers={

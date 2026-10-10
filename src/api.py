@@ -13,6 +13,9 @@ The NVIDIA key stays on the server; clients never see it. Requests run in
 parallel threads: searches share one retriever through SerialSearch, and the
 slow answer-model calls run side by side.
 
+It also serves the React app (Phase 7) at / once it is built
+(cd frontend && npm run build), so one server runs the whole chatbot.
+
 Run:  docker compose up -d qdrant     (the vector database server)
       python -m src.api              (this server, http://localhost:8000)
 """
@@ -24,6 +27,7 @@ from typing import Literal
 
 from fastapi import FastAPI, HTTPException, Request
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
 
 from src import config
@@ -35,6 +39,7 @@ from src.retrieve import METHODS, Retriever, SerialSearch, citation
 from src.structure import STHANAS
 
 STHANA_NAMES = {s.key: s.name for s in STHANAS}
+FRONTEND_DIST = config.PROJECT_ROOT / "frontend" / "dist"
 
 
 # --- what the server holds ------------------------------------------------------
@@ -198,6 +203,11 @@ def create_app(services: Services | None = None) -> FastAPI:
             removed_citations=answer.unknown_labels,
             disclaimer=DISCLAIMER,
         )
+
+    # The built React app (cd frontend && npm run build), served last so the
+    # /api routes above take precedence. In development Vite serves it instead.
+    if FRONTEND_DIST.is_dir():
+        app.mount("/", StaticFiles(directory=FRONTEND_DIST, html=True), name="frontend")
 
     return app
 

@@ -119,6 +119,25 @@ doubles the waiting time.
   on the server. Requests run in parallel; browser pages from
   `http://localhost:5173` (the React dev server, Phase 7) may call it.
 
+**Web app (Phase 7).** A React + TypeScript frontend in `frontend/` (Vite):
+- *Ask*: chat with cited answers. Citations such as [S1] are chips that open the
+  passage; every source is badged "Charaka's text" or "Translator's note, not
+  Charaka's words"; the backend's warnings and disclaimer are shown as sent.
+  Options: Charaka's text only, and question rewriting.
+- *Search the text*: passages only, through `/api/search`, quick and free.
+- A banner explains what to start when the backend is down or not ready.
+
+Development (two servers; Vite forwards `/api` to FastAPI):
+
+    docker compose up -d qdrant
+    python -m src.api                 # http://localhost:8000
+    cd frontend && npm install && npm run dev   # http://localhost:5173
+
+Production (one server): `cd frontend && npm run build`, then
+`python -m src.api` also serves the app at http://localhost:8000.
+Frontend tests: `cd frontend && npm test` (Vitest + React Testing Library,
+with a fake backend).
+
 ## Setup (Windows / PowerShell)
 
     py -3.11 -m venv .venv
@@ -135,3 +154,4 @@ Phase 3 — chunking.
 Phase 4 — embeddings, Qdrant vector database and hybrid search.
 Phase 5 — answers with citations (gpt-oss-20b via NVIDIA).
 Phase 6 — backend server: Qdrant in Docker and a FastAPI web API.
+Phase 7 — React web app (Ask and Search), served by the API in production.
