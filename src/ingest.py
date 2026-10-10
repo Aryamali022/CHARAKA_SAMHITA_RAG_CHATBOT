@@ -143,8 +143,8 @@ def clean_text(text: str) -> str:
         line = line.strip()
         if re.fullmatch(r"-{3,}|[─═]+", line) or re.fullmatch(r"\|?[\s:|-]*\|[\s:|-]*", line):
             continue  # horizontal rules and empty/separator table rows
-        line = re.sub(r"^#+\s*", "", line)  # markdown heading marks
         line = re.sub(r"^->\s*|\s*<-$", "", line)  # ->centred<- lines
+        line = re.sub(r"^#+\s*", "", line)  # markdown heading marks, also inside ->...<-
         line = line.replace("|", " ")  # table cells
         line = re.sub(r"[*†‡§¶⁰¹²³⁴⁵⁶⁷⁸⁹]", "", line)  # emphasis and footnote marks
         line = re.sub(r"\(\s*\)", "", line)  # brackets left empty by removed marks

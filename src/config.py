@@ -34,3 +34,5 @@ SOURCE_CONTENT_SHA256 = "c25eb5c353a774ebf4e02fb88d412e923e3354e2c8627305bbbc6be
 
 # --- Generated files ---
 PAGES_PATH = PROCESSED_DIR / "pages.jsonl"
+LESSON_PAGES_PATH = PROCESSED_DIR / "lesson_pages.jsonl"
+STRUCTURE_PATH = PROCESSED_DIR / "structure.json"

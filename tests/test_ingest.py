@@ -73,6 +73,7 @@ def test_markup_is_removed_but_words_are_kept(pages):
 
 def test_clean_text_handles_centring_bold_tables_and_empty_brackets():
     assert clean_text("->**CALCUTTA**<-") == "CALCUTTA"
+    assert clean_text("->### LESSON IX.<-") == "LESSON IX."
     assert clean_text("| Oil | Ghee |\n|---|---|") == "Oil Ghee"
     assert clean_text("alcohol.(*)") == "alcohol."
 

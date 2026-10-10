@@ -28,6 +28,16 @@ does not contain an answer.
 
     python -m scripts.verify_source   # check the source file
     python -m src.ingest              # -> data/processed/pages.jsonl + quality report
+    python -m src.structure           # -> data/processed/lesson_pages.jsonl + structure.json
+
+**Structure (Phase 2).** The translation prints the divisions in this order:
+Sutra, Vimana, Sharira, Indriya, Nidana, Chikitsa (lessons I–XXII), 88 lessons
+in all. `src/structure.py` assigns each page's text to its sthana and lesson
+and splits pages where a lesson starts mid-page. It leaves out the monthly-part
+wrapper pages (press opinions, notices, adverts) that the transcription marks
+as text. A small, explicit list (`LESSON_START_FIXES`) covers lesson starts the
+transcription leaves unmarked or misnumbered. The run fails if any lesson is
+missing. Check `data/processed/structure.json` for the page span of each lesson.
 
 ## Setup (Windows / PowerShell)
 
@@ -40,3 +50,4 @@ does not contain an answer.
 ## Status
 
 Phase 1 — source verification and page ingestion.
+Phase 2 — sthana / lesson structure.
