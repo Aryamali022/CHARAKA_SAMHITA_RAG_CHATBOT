@@ -1,0 +1,1180 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="description" content="How the Charaka Samhita RAG chatbot works, step by step, with real data from the system.">
+<title>Inside the Charaka Chatbot</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Gotu&family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans:ital,wght@0,400;0,500;0,600;1,400&display=swap">
+<style>
+/* Layout: a left rail of the 14 real pipeline stages beside one reading column;
+   every stage = what happens, a real example from the system, the formula, the output. */
+:root {
+  --paper: #f5f6fb;
+  --surface: #ffffff;
+  --surface-2: #eceef8;
+  --ink: #1b2150;
+  --muted: #5b6185;
+  --line: #d8dbeb;
+  --accent: #a96a05;        /* turmeric, dark enough for text on paper */
+  --accent-fill: #e8a317;
+  --accent-soft: #fbefd6;
+  --leaf: #23744a;          /* Charaka's text */
+  --leaf-soft: #e0f1e7;
+  --saffron: #b9520f;       /* translator's notes */
+  --saffron-soft: #fde7d7;
+  --indigo: #3b47b0;        /* meaning (vector) search */
+  --indigo-soft: #e3e6fb;
+  --danger: #a8231b;
+  --danger-soft: #fbe2df;
+  --code-bg: #f0f2fa;
+  --display: "Gotu", "Iowan Old Style", Georgia, serif;
+  --body: "IBM Plex Sans", "Segoe UI", system-ui, sans-serif;
+  --mono: "IBM Plex Mono", ui-monospace, "Cascadia Code", Consolas, monospace;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --paper: #0e1124; --surface: #161a34; --surface-2: #1e2344; --ink: #e7e9f7; --muted: #a2a8ca;
+    --line: #2b3160; --accent: #f2c14e; --accent-fill: #f2c14e; --accent-soft: #3a2e10;
+    --leaf: #82d6a3; --leaf-soft: #16352a; --saffron: #ffae76; --saffron-soft: #3d2415;
+    --indigo: #9da8ff; --indigo-soft: #232a5e; --danger: #ffb3aa; --danger-soft: #43201c;
+    --code-bg: #12162e; color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --paper: #0e1124; --surface: #161a34; --surface-2: #1e2344; --ink: #e7e9f7; --muted: #a2a8ca;
+  --line: #2b3160; --accent: #f2c14e; --accent-fill: #f2c14e; --accent-soft: #3a2e10;
+  --leaf: #82d6a3; --leaf-soft: #16352a; --saffron: #ffae76; --saffron-soft: #3d2415;
+  --indigo: #9da8ff; --indigo-soft: #232a5e; --danger: #ffb3aa; --danger-soft: #43201c;
+  --code-bg: #12162e; color-scheme: dark;
+}
+
+* { box-sizing: border-box; }
+body { background: var(--paper); color: var(--ink); font: 16px/1.65 var(--body); margin: 0; }
+.wrap { max-width: 1180px; margin: 0 auto; padding-inline: 20px; padding-block: 0 48px; }
+h1, h2, h3 { font-family: var(--display); font-weight: 400; text-wrap: balance; line-height: 1.2; }
+h1 { font-size: clamp(2rem, 5vw, 3.3rem); margin: 0; }
+h2 { font-size: clamp(1.45rem, 3vw, 1.9rem); margin: 0; }
+h3 { font-size: 1.15rem; margin: 18px 0 6px; }
+p { margin: 0 0 12px; }
+code, .mono { font-family: var(--mono); font-size: 0.88em; }
+a { color: var(--indigo); }
+:focus-visible { outline: 2px solid var(--accent-fill); outline-offset: 2px; }
+
+/* --- hero --- */
+.hero { padding-block: 40px 20px; display: grid; gap: 14px; }
+.hero .sanskrit { font-family: var(--display); color: var(--accent); font-size: 1.25rem; letter-spacing: 0.02em; }
+.hero .lead { font-size: 1.12rem; max-width: 70ch; color: var(--muted); }
+.hero .lead strong { color: var(--ink); }
+.question-pill {
+  display: inline-flex; gap: 10px; align-items: center; padding: 8px 14px; border-radius: 999px;
+  background: var(--indigo-soft); color: var(--indigo); font-weight: 500; width: fit-content; max-width: 100%;
+}
+.question-pill span { color: var(--ink); }
+
+/* --- overview flow --- */
+.overview { background: var(--surface); border: 1px solid var(--line); border-radius: 16px; padding: 18px; margin-block: 8px 28px; }
+.lane { display: grid; grid-template-columns: 170px 1fr; gap: 12px; align-items: center; padding-block: 10px; }
+.lane + .lane { border-top: 1px dashed var(--line); }
+.lane-name { font-size: 0.78rem; text-transform: uppercase; letter-spacing: 0.08em; color: var(--muted); }
+.lane-name b { display: block; font-family: var(--display); text-transform: none; letter-spacing: 0; font-size: 1.05rem; font-weight: 400; color: var(--ink); }
+.nodes { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; min-width: 0; }
+.node {
+  text-decoration: none; color: var(--ink); background: var(--surface-2); border: 1px solid var(--line);
+  border-radius: 8px; padding: 5px 10px; font-size: 0.86rem; white-space: nowrap;
+}
+.node:hover { border-color: var(--accent-fill); }
+.arrow { color: var(--muted); font-size: 0.85rem; }
+.flowing .node { animation: pulse 9.8s infinite; animation-delay: calc(var(--i) * 0.7s); }
+@keyframes pulse {
+  0%, 9% { background: var(--accent-soft); border-color: var(--accent-fill); }
+  14%, 100% { background: var(--surface-2); border-color: var(--line); }
+}
+
+/* --- page layout with rail --- */
+.layout { display: grid; grid-template-columns: 220px minmax(0, 1fr); gap: 36px; }
+.rail { position: sticky; top: calc(env(safe-area-inset-top, 0px) + 16px); align-self: start; max-height: calc(100vh - 32px); overflow: auto; padding-top: 8px; }
+.rail p { font-size: 0.72rem; text-transform: uppercase; letter-spacing: 0.08em; color: var(--muted); margin: 14px 0 6px; }
+.rail ol { list-style: none; margin: 0; padding: 0; display: grid; gap: 2px; }
+.rail a { display: grid; grid-template-columns: 26px 1fr; text-decoration: none; color: var(--muted); font-size: 0.86rem; padding: 3px 6px; border-radius: 6px; }
+.rail a span { font-family: var(--mono); font-size: 0.75rem; padding-top: 2px; }
+.rail a.active { color: var(--ink); background: var(--accent-soft); }
+.part-title { margin: 32px 0 4px; padding: 14px 18px; border-radius: 12px; background: var(--ink); color: var(--paper); }
+.part-title h2 { color: var(--paper); }
+.part-title p { margin: 4px 0 0; opacity: 0.85; font-size: 0.95rem; }
+
+/* --- a stage --- */
+.step { padding-block: 34px 10px; border-bottom: 1px solid var(--line); scroll-margin-top: 16px; }
+.step-head { display: grid; grid-template-columns: auto 1fr; gap: 14px; align-items: baseline; margin-bottom: 10px; }
+.step-no { font-family: var(--mono); color: var(--accent); font-size: 0.95rem; border: 1px solid var(--accent-fill); border-radius: 6px; padding: 0 6px; }
+.eyebrow { font-size: 0.74rem; text-transform: uppercase; letter-spacing: 0.08em; color: var(--muted); margin: 0 0 2px; }
+.step .lead { max-width: 72ch; }
+.cols { display: grid; grid-template-columns: minmax(0, 1.35fr) minmax(0, 1fr); gap: 18px; align-items: start; }
+.cols > * { min-width: 0; }
+
+figure.viz { margin: 0; background: var(--surface); border: 1px solid var(--line); border-radius: 14px; padding: 14px; position: relative; }
+figure.viz figcaption { font-size: 0.8rem; color: var(--muted); margin-top: 10px; }
+.viz-head { display: flex; justify-content: space-between; gap: 10px; align-items: center; margin-bottom: 10px; }
+.viz-title { font-size: 0.78rem; text-transform: uppercase; letter-spacing: 0.07em; color: var(--muted); }
+.replay {
+  font: 500 0.78rem var(--body); color: var(--accent); background: transparent; border: 1px solid var(--accent-fill);
+  border-radius: 999px; padding: 2px 10px; cursor: pointer;
+}
+.replay:hover { background: var(--accent-soft); }
+
+.formula { background: var(--accent-soft); border-radius: 12px; padding: 14px 16px; }
+.formula .ftitle { font-size: 0.74rem; text-transform: uppercase; letter-spacing: 0.08em; color: var(--accent); margin-bottom: 8px; font-weight: 600; }
+.eq { font-family: var(--mono); font-size: 0.9rem; line-height: 2; overflow-x: auto; padding-bottom: 2px; }
+.eq .v { color: var(--indigo); }
+.eq .k { color: var(--accent); }
+.frac { display: inline-flex; flex-direction: column; vertical-align: middle; text-align: center; line-height: 1.35; margin: 0 3px; }
+.frac > span:first-child { border-bottom: 1px solid currentColor; padding: 0 4px; }
+.formula ul { margin: 8px 0 0; padding-left: 18px; font-size: 0.9rem; }
+.formula p { font-size: 0.9rem; }
+.output { margin-top: 14px; display: flex; flex-wrap: wrap; gap: 8px; }
+.stat { background: var(--surface); border: 1px solid var(--line); border-radius: 10px; padding: 6px 12px; font-size: 0.85rem; color: var(--muted); }
+.stat b { display: block; font-family: var(--mono); font-size: 1.05rem; color: var(--ink); font-weight: 500; font-variant-numeric: tabular-nums; }
+.file { font-family: var(--mono); font-size: 0.78rem; color: var(--muted); margin-top: 10px; }
+
+/* code / raw text */
+pre.code {
+  margin: 0; background: var(--code-bg); border: 1px solid var(--line); border-radius: 10px; padding: 12px;
+  font: 0.78rem/1.55 var(--mono); white-space: pre-wrap; overflow-wrap: anywhere; max-height: 340px; overflow: auto;
+}
+pre.code .ln { display: block; position: relative; }
+.hl-header { color: var(--muted); }
+.hl-marker { background: var(--accent-soft); color: var(--accent); font-weight: 500; }
+.hl-tag { color: var(--saffron); }
+.hl-note { color: var(--saffron); }
+.hl-cite { background: var(--indigo-soft); color: var(--indigo); border-radius: 4px; padding: 0 2px; }
+.hl-bad { background: var(--danger-soft); color: var(--danger); border-radius: 4px; padding: 0 2px; }
+.strike { position: relative; }
+.strike::after {
+  content: ""; position: absolute; left: 0; right: 0; top: 50%; height: 1.5px; background: var(--danger);
+  transform-origin: left; transform: scaleX(1);
+}
+.playing .strike::after { animation: strike 0.5s both; animation-delay: calc(var(--i, 0) * 0.04s + 0.3s); }
+@keyframes strike { from { transform: scaleX(0); } }
+.playing .gone { animation: fadeDown 0.6s both; animation-delay: calc(var(--i, 0) * 0.04s + 0.9s); }
+@keyframes fadeDown { from { opacity: 1; } to { opacity: 0.25; } }
+.gone { opacity: 0.25; }
+
+/* generic reveal used by many figures */
+.playing .rise { animation: rise 0.55s both; animation-delay: calc(var(--i, 0) * 0.09s); }
+@keyframes rise { from { opacity: 0; transform: translateY(8px); } }
+.playing .grow { animation: grow 0.9s cubic-bezier(.2,.7,.2,1) both; animation-delay: calc(var(--i, 0) * 0.08s); }
+@keyframes grow { from { transform: scaleX(0); } }
+.playing .growY { animation: growY 0.8s cubic-bezier(.2,.7,.2,1) both; animation-delay: calc(var(--i, 0) * 0.07s); }
+@keyframes growY { from { transform: scaleY(0); } }
+
+/* two panes */
+.panes { display: grid; grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr); gap: 10px; align-items: stretch; }
+.panes > * { min-width: 0; }
+.pane-arrow { align-self: center; color: var(--accent); font-size: 1.4rem; }
+.pane-label { font-size: 0.75rem; color: var(--muted); margin-bottom: 4px; }
+.kv { display: grid; grid-template-columns: auto 1fr; gap: 2px 10px; font: 0.8rem var(--mono); margin-top: 8px; }
+.kv dt { color: var(--muted); }
+.kv dd { margin: 0; overflow-wrap: anywhere; }
+
+/* bar charts */
+.bars { display: grid; gap: 6px; }
+.bar-row { display: grid; grid-template-columns: minmax(0, 12rem) minmax(0, 1fr) 4.2rem; gap: 10px; align-items: center; font-size: 0.82rem; }
+.bar-row .name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.bar-row .val { font-family: var(--mono); text-align: right; font-variant-numeric: tabular-nums; }
+.track { height: 14px; background: var(--surface-2); border-radius: 4px; overflow: hidden; display: flex; }
+.fill { height: 100%; background: var(--accent-fill); transform-origin: left; border-radius: 4px; }
+.fill.indigo { background: var(--indigo); }
+.fill.leaf { background: var(--leaf); }
+.fill.saffron { background: var(--saffron); }
+.fill.part { border-radius: 0; }
+.legend { display: flex; flex-wrap: wrap; gap: 6px 14px; font-size: 0.78rem; color: var(--muted); margin-top: 8px; }
+.legend i { display: inline-block; width: 10px; height: 10px; border-radius: 2px; margin-right: 5px; vertical-align: -1px; }
+
+/* timeline of sthanas */
+.timeline { display: flex; height: 46px; border-radius: 8px; overflow: hidden; border: 1px solid var(--line); }
+.seg { display: flex; align-items: center; justify-content: center; font-size: 0.72rem; color: #fff; transform-origin: left; overflow: hidden; white-space: nowrap; }
+.timeline-axis { display: flex; justify-content: space-between; font: 0.72rem var(--mono); color: var(--muted); margin-top: 4px; }
+.sthana-table { width: 100%; border-collapse: collapse; font-size: 0.82rem; margin-top: 10px; }
+.sthana-table td, .sthana-table th { padding: 4px 6px; border-bottom: 1px solid var(--line); text-align: left; }
+.sthana-table th { color: var(--muted); font-weight: 500; }
+.sthana-table td.num { font-family: var(--mono); text-align: right; font-variant-numeric: tabular-nums; }
+.swatch { display: inline-block; width: 10px; height: 10px; border-radius: 2px; margin-right: 6px; }
+
+/* chunk packing */
+.bucket-wrap { display: grid; grid-template-columns: minmax(0, 1fr) 150px; gap: 14px; align-items: end; }
+.paras { display: grid; gap: 5px; }
+.para { border-radius: 6px; padding: 5px 8px; font-size: 0.76rem; background: var(--indigo-soft); color: var(--ink); display: flex; justify-content: space-between; gap: 8px; }
+.para b { font-family: var(--mono); font-weight: 500; color: var(--indigo); white-space: nowrap; }
+.para.ctx { background: var(--accent-soft); }
+.para.ctx b { color: var(--accent); }
+.para.spec { background: var(--surface-2); }
+.para.out { background: var(--danger-soft); }
+.para.out b { color: var(--danger); }
+.bucket { height: 220px; border: 2px solid var(--line); border-top: 0; border-radius: 0 0 12px 12px; position: relative; overflow: hidden; background: var(--surface-2); }
+.bucket .level { position: absolute; left: 0; right: 0; bottom: 0; background: var(--indigo); transform-origin: bottom; }
+.bucket .cap { position: absolute; left: 0; right: 0; border-top: 2px dashed var(--danger); }
+.bucket .cap span { position: absolute; right: 4px; top: -18px; font: 0.7rem var(--mono); color: var(--danger); }
+.bucket-label { text-align: center; font: 0.8rem var(--mono); margin-top: 6px; }
+.tokens { display: flex; flex-wrap: wrap; gap: 4px; margin: 6px 0 10px; }
+.tok { font: 0.78rem var(--mono); padding: 2px 6px; border-radius: 5px; background: var(--surface-2); border: 1px solid var(--line); }
+.tok.special { color: var(--muted); }
+.tok.piece { background: var(--saffron-soft); border-color: transparent; color: var(--saffron); }
+
+/* vectors */
+.model-flow { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; font-size: 0.82rem; margin-bottom: 12px; }
+.model-flow .box { border: 1px solid var(--line); border-radius: 8px; padding: 4px 9px; background: var(--surface-2); }
+.model-flow .box.model { background: var(--indigo); color: var(--paper); border-color: transparent; }
+.vec { display: grid; grid-template-columns: repeat(8, minmax(0, 1fr)); gap: 6px; align-items: end; height: 130px; border-bottom: 1px solid var(--line); position: relative; }
+.vec .col { display: flex; flex-direction: column; justify-content: center; height: 100%; position: relative; }
+.vec .barv { position: absolute; left: 15%; right: 15%; border-radius: 3px; transform-origin: bottom; }
+.vec .barv.pos { bottom: 50%; background: var(--indigo); }
+.vec .barv.neg { top: 50%; background: var(--saffron); transform-origin: top; }
+.vec .zero { position: absolute; left: 0; right: 0; top: 50%; border-top: 1px dashed var(--line); }
+.vec-nums { display: grid; grid-template-columns: repeat(8, minmax(0, 1fr)); gap: 6px; font: 0.68rem var(--mono); text-align: center; color: var(--muted); margin-top: 4px; }
+.strip { display: grid; grid-template-columns: repeat(48, 1fr); gap: 1px; margin-top: 12px; }
+.strip i { height: 7px; background: var(--surface-2); border-radius: 1px; }
+.strip i.real { background: var(--indigo); }
+
+/* qdrant */
+canvas.points { width: 100%; height: 170px; display: block; border-radius: 8px; background: var(--surface-2); }
+.point-card { margin-top: 10px; }
+
+/* ranking tables */
+.rank-list { display: grid; gap: 5px; }
+.rank-row { display: grid; grid-template-columns: 2rem minmax(0, 1fr) 5.5rem 3.6rem; gap: 8px; align-items: center; font-size: 0.8rem; }
+.rank-row .r { font-family: var(--mono); color: var(--muted); }
+.rank-row .c { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.rank-row .s { font-family: var(--mono); text-align: right; font-variant-numeric: tabular-nums; }
+.rank-row.win { font-weight: 600; }
+.kind { font-size: 0.68rem; padding: 0 6px; border-radius: 999px; font-weight: 600; white-space: nowrap; }
+.kind.text { background: var(--leaf-soft); color: var(--leaf); }
+.kind.note { background: var(--saffron-soft); color: var(--saffron); }
+
+.compare { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; }
+.compare > div { background: var(--surface-2); border-radius: 10px; padding: 10px; min-width: 0; }
+.compare h4 { margin: 0 0 4px; font-size: 0.85rem; }
+.compare .sub { font-size: 0.75rem; color: var(--muted); margin-bottom: 6px; }
+.term-row { display: grid; grid-template-columns: 3.6rem 2.4rem minmax(0, 1fr) 3rem; gap: 6px; align-items: center; font: 0.75rem var(--mono); margin-bottom: 4px; }
+.term-row .track { height: 10px; }
+.total { font: 600 0.82rem var(--mono); text-align: right; margin-top: 4px; }
+
+table.data { width: 100%; border-collapse: collapse; font-size: 0.8rem; }
+table.data th, table.data td { padding: 5px 6px; border-bottom: 1px solid var(--line); text-align: left; vertical-align: top; }
+table.data th { color: var(--muted); font-weight: 500; }
+table.data td.num { font-family: var(--mono); text-align: right; font-variant-numeric: tabular-nums; }
+.table-scroll { overflow-x: auto; }
+
+/* checks */
+.checks { display: grid; gap: 8px; }
+.check { display: grid; grid-template-columns: 1.6rem minmax(0, 1fr); gap: 8px; background: var(--surface-2); border-radius: 10px; padding: 8px 10px; font-size: 0.85rem; }
+.check .tick { width: 1.4rem; height: 1.4rem; border-radius: 50%; background: var(--leaf); color: var(--paper); display: grid; place-items: center; font-size: 0.75rem; }
+.check b { display: block; }
+.check code { overflow-wrap: anywhere; }
+
+/* final answer card, as the React app shows it */
+.chat { background: var(--surface); border: 1px solid var(--line); border-radius: 14px; padding: 14px; display: grid; gap: 10px; }
+.bubble-q { background: var(--surface-2); border-radius: 10px; padding: 8px 12px; }
+.bubble-q b { color: var(--accent); margin-right: 8px; }
+.bubble-a { border: 1px solid var(--line); border-radius: 10px; padding: 10px 14px; }
+.chip { display: inline-block; font: 600 0.75rem var(--body); color: var(--accent); border: 1px solid var(--accent-fill); border-radius: 6px; padding: 0 6px; margin-left: 4px; }
+.src { border: 1px solid var(--line); border-left: 4px solid var(--leaf); border-radius: 8px; padding: 6px 10px; font-size: 0.85rem; margin-top: 8px; }
+.src .kind { margin-left: 6px; }
+.disc { font-size: 0.8rem; color: var(--muted); margin-top: 8px; }
+.callout { border-radius: 12px; padding: 12px 16px; background: var(--danger-soft); color: var(--ink); margin-top: 14px; font-size: 0.92rem; }
+.callout b { color: var(--danger); }
+.typing::after { content: "▍"; color: var(--accent); animation: blink 1s steps(2) infinite; }
+@keyframes blink { 50% { opacity: 0; } }
+
+/* evaluation */
+.scores { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 10px; margin-top: 10px; }
+.score { background: var(--surface); border: 1px solid var(--line); border-radius: 12px; padding: 10px 12px; }
+.score b { display: block; font-family: var(--display); font-size: 1.7rem; font-weight: 400; color: var(--ink); font-variant-numeric: tabular-nums; }
+.score span { font-size: 0.8rem; color: var(--muted); }
+
+footer { margin-top: 40px; font-size: 0.82rem; color: var(--muted); border-top: 1px solid var(--line); padding-top: 14px; }
+
+@media (max-width: 980px) {
+  .layout { grid-template-columns: minmax(0, 1fr); }
+  .rail { display: none; }
+  .cols { grid-template-columns: minmax(0, 1fr); }
+}
+@media (max-width: 640px) {
+  .lane { grid-template-columns: minmax(0, 1fr); }
+  .panes { grid-template-columns: minmax(0, 1fr); }
+  .pane-arrow { transform: rotate(90deg); justify-self: center; }
+  .bucket-wrap { grid-template-columns: minmax(0, 1fr); }
+  .bucket { height: 150px; }
+  .compare { grid-template-columns: minmax(0, 1fr); }
+  .bar-row { grid-template-columns: minmax(0, 7.5rem) minmax(0, 1fr) 3.6rem; }
+  .rank-row { grid-template-columns: 1.6rem minmax(0, 1fr) 4.8rem 3.2rem; }
+}
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after { animation: none !important; transition: none !important; }
+}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header class="hero">
+    <div class="sanskrit">चरक संहिता · Charaka Samhita RAG chatbot</div>
+    <h1>Inside the Charaka Chatbot</h1>
+    <p class="lead">Follow the system from a scanned book of the 1890s to a cited answer. One question travels through every stage, and <strong>every number on this page comes from the real pipeline</strong>: the actual file, chunk, vectors, scores and model reply.</p>
+    <div class="question-pill">Example question <span>“How many bones are there in the human body?”</span></div>
+  </header>
+
+  <section class="overview flowing" aria-label="The whole pipeline">
+    <div class="lane">
+      <div class="lane-name">Part A · once<b>Build the library</b></div>
+      <div class="nodes" id="laneA"></div>
+    </div>
+    <div class="lane">
+      <div class="lane-name">Part B · every question<b>Answer a question</b></div>
+      <div class="nodes" id="laneB"></div>
+    </div>
+  </section>
+
+  <div class="layout">
+    <nav class="rail" aria-label="Stages">
+      <p>Build the library</p>
+      <ol id="railA"></ol>
+      <p>Answer a question</p>
+      <ol id="railB"></ol>
+      <p>Results</p>
+      <ol><li><a href="#eval"><span>✓</span>How well it works</a></li></ol>
+    </nav>
+
+    <main>
+      <div class="part-title">
+        <h2>Part A · Build the library</h2>
+        <p>Runs once, offline. Turns the raw book into 2,296 searchable passages stored in a vector database.</p>
+      </div>
+
+      <!-- 01 RAW FILE -->
+      <section class="step" id="s1">
+        <div class="step-head"><span class="step-no">01</span><div><p class="eyebrow">src/ingest.py · scripts/verify_source.py</p><h2>The raw source file</h2></div></div>
+        <p class="lead">The book arrives as one plain-text file from Source Library: a transcription of A. C. Kaviratna's English translation (Calcutta, 1890 onward). It opens with a download header, then every scanned page begins with a <code>[Page N]</code> marker. The header is thrown away, and the file is fingerprinted to prove it is the exact copy the project was built on.</p>
+        <div class="cols">
+          <figure class="viz" data-anim>
+            <div class="viz-head"><span class="viz-title">Top of the real file · header removed</span><button class="replay" type="button">Replay</button></div>
+            <pre class="code" id="rawHeader"></pre>
+            <figcaption>Struck-through lines are the download header. It contains the download date, so it changes with every download and is excluded.</figcaption>
+          </figure>
+          <aside class="formula">
+            <div class="ftitle">Formula · source fingerprint</div>
+            <div class="eq"><span class="v">start</span> = position of “[Page 1]”<br><span class="v">fingerprint</span> = SHA-256( normalise_line_endings( <span class="v">file</span>[<span class="v">start</span> :] ) )</div>
+            <p class="mono" style="font-size:0.72rem;overflow-wrap:anywhere">= c25eb5c353a774ebf4e02fb88d412e923e3354e2c8627305bbbc6be14cead23a</p>
+            <div class="eq">valid ⇔ pages = <span class="k">1988</span> ∧ fingerprint = expected</div>
+            <p>Two downloads of the same book differ only in the header, so hashing from <code>[Page 1]</code> gives the same fingerprint every time, on Windows or Linux line endings.</p>
+          </aside>
+        </div>
+        <div class="output">
+          <div class="stat"><b>5,353,011</b>bytes</div>
+          <div class="stat"><b>72,375</b>lines</div>
+          <div class="stat"><b>1,988</b>[Page N] markers</div>
+          <div class="stat"><b>OK</b>fingerprint matches</div>
+        </div>
+      </section>
+
+      <!-- 02 PAGES -->
+      <section class="step" id="s2">
+        <div class="step-head"><span class="step-no">02</span><div><p class="eyebrow">src/ingest.py · split_pages(), parse_page(), clean_text()</p><h2>Page by page: read, clean, separate footnotes</h2></div></div>
+        <p class="lead">The file is cut at every <code>[Page N]</code> marker. On each page the transcriber's tags (scan quality, page type, running header…) are read as data and removed; markdown marks are stripped; and the translator's footnotes are moved out of the main text, so they can never be mistaken for Charaka's words.</p>
+        <figure class="viz" data-anim>
+          <div class="viz-head"><span class="viz-title">Real scan page 11 · raw → clean record</span><button class="replay" type="button">Replay</button></div>
+          <div class="panes">
+            <div><div class="pane-label">Raw, as transcribed</div><pre class="code" id="rawPage"></pre></div>
+            <div class="pane-arrow" aria-hidden="true">→</div>
+            <div class="rise" style="--i:8">
+              <div class="pane-label">Clean page record (pages.jsonl)</div>
+              <pre class="code" id="cleanPage"></pre>
+              <dl class="kv" id="pageMeta"></dl>
+            </div>
+          </div>
+          <figcaption>Orange = transcription tags (read, then removed). The “*” and superscript numbers are footnote marks; the footnotes themselves go to <code>notes_text</code>.</figcaption>
+        </figure>
+        <div class="cols" style="margin-top:16px">
+          <figure class="viz" data-anim>
+            <div class="viz-head"><span class="viz-title">All 1,988 pages by type</span><button class="replay" type="button">Replay</button></div>
+            <div class="bars" id="pageTypes"></div>
+            <figcaption>Only “text” pages can be searched. Bars are drawn to scale.</figcaption>
+          </figure>
+          <aside class="formula">
+            <div class="ftitle">Rules · quality flags</div>
+            <div class="eq">empty   ⇔ type = text ∧ |main_text| &lt; <span class="k">50</span> chars</div>
+            <div class="eq">garbled ⇔ <span class="frac"><span>letters</span><span>visible characters</span></span> &lt; <span class="k">0.6</span></div>
+            <ul>
+              <li><b>Footnote split:</b> the first <code>---</code> line that is not followed by a heading starts the footnotes; otherwise the first line starting with a footnote mark (*, †).</li>
+              <li>Other flags: poor scan quality, words marked unclear, missing printed page number.</li>
+            </ul>
+          </aside>
+        </div>
+      </section>
+
+      <!-- 03 LESSONS -->
+      <section class="step" id="s3">
+        <div class="step-head"><span class="step-no">03</span><div><p class="eyebrow">src/structure.py · build_structure()</p><h2>Lesson by lesson: rebuilding the book's structure</h2></div></div>
+        <p class="lead">A chatbot that cites “Sharira Sthana, Lesson VII” needs every passage labelled. The book has no machine-readable contents, so the structure is rebuilt from its own headings in three moves.</p>
+        <div class="checks" style="margin-bottom:14px">
+          <div class="check"><span class="tick">1</span><div><b>Book page or publisher page?</b>The book came out in monthly parts whose wrappers (press letters, notices, adverts) were bound in and typed as “text”. A page counts as the book only if its running header reads like <code>CHARAKA-SAMHITA</code> / <code>STHANA</code>, or a lesson heading opens it. <span id="wrapperNote"></span></div></div>
+          <div class="check"><span class="tick">2</span><div><b>Find where each lesson starts.</b> A line <code>LESSON &lt;roman&gt;</code> must be the <em>next expected</em> lesson; numbering restarts at I in each sthana, so “LESSON I” moves to the next division. Four starts the transcription gets wrong are fixed explicitly: <span id="fixes"></span>.</div></div>
+          <div class="check"><span class="tick">3</span><div><b>Split pages where a lesson starts mid-page.</b> 55 pages hold the end of one lesson and the start of the next; e.g. scan page 23 is cut between Lesson I and Lesson II of the Sutra Sthana.</div></div>
+        </div>
+        <figure class="viz" data-anim>
+          <div class="viz-head"><span class="viz-title">The six divisions across the scan (to scale, pages 11–1986)</span><button class="replay" type="button">Replay</button></div>
+          <div class="timeline" id="timeline"></div>
+          <div class="timeline-axis"><span>p. 11</span><span>p. 1986</span></div>
+          <div class="table-scroll"><table class="sthana-table" id="sthanaTable"></table></div>
+          <figcaption>This translation prints the divisions in a non-standard order and stops at Chikitsa Lesson XXII; Kalpa and Siddhi Sthana were never translated. Every lesson boundary was checked against the book's own closing lines (“Thus ends the … Lesson”).</figcaption>
+        </figure>
+        <div class="output">
+          <div class="stat"><b>103</b>publisher pages left out</div>
+          <div class="stat"><b>88</b>lessons found, in order</div>
+          <div class="stat"><b>1,677</b>lesson-page records</div>
+          <div class="stat"><b>55</b>pages split between lessons</div>
+        </div>
+      </section>
+
+      <!-- 04 CHUNKING -->
+      <section class="step" id="s4">
+        <div class="step-head"><span class="step-no">04</span><div><p class="eyebrow">src/chunk.py · lesson_paragraphs(), pack()</p><h2>Chunking: cutting lessons into passages</h2></div></div>
+        <p class="lead">Lessons are far too long to search as a whole (up to 19,700 words), and pages break sentences in half. So each lesson is read as one continuous text and packed, whole paragraph by whole paragraph, into passages (“chunks”) that the embedding model can read completely: at most <b>512 tokens</b>, including a context line naming the lesson.</p>
+        <div class="cols">
+          <figure class="viz" data-anim>
+            <div class="viz-head"><span class="viz-title">Packing the real chunk sharira-07-text-002</span><button class="replay" type="button">Replay</button></div>
+            <div class="bucket-wrap">
+              <div class="paras" id="paras"></div>
+              <div>
+                <div class="bucket" aria-hidden="true"><div class="level growY" id="level"></div><div class="cap" style="bottom: calc(512/530*100%)"><span>512</span></div></div>
+                <div class="bucket-label" id="bucketLabel">504 / 512 tokens</div>
+              </div>
+            </div>
+            <figcaption>Paragraph sizes are real token counts. The next paragraph did not fit, so it starts the next chunk.</figcaption>
+          </figure>
+          <aside class="formula">
+            <div class="ftitle">Formula · chunk size limit</div>
+            <div class="eq"><span class="v">size</span> = tokens(context) + Σ tokens(paragraph) + <span class="k">2</span> ≤ <span class="k">512</span></div>
+            <div class="eq">= 21 + (83+31+295+40+32) + 2 = <b>504</b> ✓</div>
+            <p>The <span class="k">2</span> is the model's <code>[CLS]</code> and <code>[SEP]</code> tokens. Sizes are counted in the model's own tokens, not words, because Sanskrit words split into many pieces:</p>
+            <div class="tokens" id="tokSanskrit"></div>
+            <div class="tokens" id="tokEnglish"></div>
+            <ul>
+              <li>A sentence or hyphenated word cut by a page break is joined back.</li>
+              <li>A short last paragraph (≤ 100 tokens) is repeated at the start of the next chunk (overlap).</li>
+              <li>Translator's footnotes become separate chunks of kind <code>note</code>.</li>
+            </ul>
+          </aside>
+        </div>
+        <div class="output">
+          <div class="stat"><b>2,296</b>chunks</div>
+          <div class="stat"><b>1,505</b>Charaka's text</div>
+          <div class="stat"><b>791</b>translator's notes</div>
+          <div class="stat"><b>477</b>median tokens</div>
+          <div class="stat"><b>0</b>over 512 (checked)</div>
+        </div>
+      </section>
+
+      <!-- 05 EMBEDDING -->
+      <section class="step" id="s5">
+        <div class="step-head"><span class="step-no">05</span><div><p class="eyebrow">src/embedder.py · src/index.py</p><h2>Embedding: turning a passage into 384 numbers</h2></div></div>
+        <p class="lead">Each chunk (context line + passage) goes through the embedding model <b>BAAI/bge-small-en-v1.5</b>, run locally with fastembed (ONNX, no API key). The model reads the tokens and outputs one vector: <b>384 numbers</b> that place the passage's meaning in space. Passages about similar things end up close together.</p>
+        <div class="cols">
+          <figure class="viz" data-anim>
+            <div class="viz-head"><span class="viz-title">Real output for sharira-07-text-002</span><button class="replay" type="button">Replay</button></div>
+            <div class="model-flow">
+              <span class="box rise" style="--i:0">“Charaka Samhita, Sharira Sthana, Lesson VII…” + passage</span><span class="arrow">→</span>
+              <span class="box rise" style="--i:1">504 tokens</span><span class="arrow">→</span>
+              <span class="box model rise" style="--i:2">bge-small · 12 layers</span><span class="arrow">→</span>
+              <span class="box rise" style="--i:3">[CLS] vector</span><span class="arrow">→</span>
+              <span class="box rise" style="--i:4">normalise</span>
+            </div>
+            <div class="vec" id="vecBars"><div class="zero"></div></div>
+            <div class="vec-nums" id="vecNums"></div>
+            <div class="strip" id="strip" aria-hidden="true"></div>
+            <figcaption>The first 8 of the 384 real numbers (blue = positive, orange = negative); the strip stands for all 384, with the 8 shown in colour.</figcaption>
+          </figure>
+          <aside class="formula">
+            <div class="ftitle">Formula · the vector</div>
+            <div class="eq"><span class="v">h</span> = model( tokens )<sub>[CLS]</sub> ∈ ℝ<sup>384</sup></div>
+            <div class="eq"><span class="v">v</span> = <span class="frac"><span>h</span><span>‖h‖</span></span> , &nbsp;‖v‖ = √(Σ v<sub>i</sub>²) = <b>1.0000</b></div>
+            <p>Normalising every vector to length 1 makes the similarity in step 08 a simple dot product.</p>
+            <p>Embedding all 2,296 chunks takes about 7 minutes on a laptop CPU and is done once.</p>
+          </aside>
+        </div>
+      </section>
+
+      <!-- 06 QDRANT -->
+      <section class="step" id="s6">
+        <div class="step-head"><span class="step-no">06</span><div><p class="eyebrow">src/index.py · save_index() · docker-compose.yml</p><h2>Storing the vectors in Qdrant</h2></div></div>
+        <p class="lead">Every chunk becomes one <b>point</b> in the Qdrant collection <code>charaka_chunks</code>: an id, its vector, and a payload with all its details. Qdrant runs as a server in Docker (port 6333), so the API, the chat and the evaluation scripts can use it at the same time.</p>
+        <div class="cols">
+          <figure class="viz" data-anim>
+            <div class="viz-head"><span class="viz-title">2,296 points · point 1132 highlighted</span><button class="replay" type="button">Replay</button></div>
+            <canvas class="points" id="pointsCanvas" aria-label="2,296 points, one per chunk; point 1132 highlighted"></canvas>
+            <pre class="code point-card rise" style="--i:3" id="pointCard"></pre>
+          </figure>
+          <aside class="formula">
+            <div class="ftitle">Collection settings</div>
+            <div class="eq">vectors: size <span class="k">384</span>, distance <span class="k">Cosine</span></div>
+            <div class="eq">metadata: model, chunks_sha256</div>
+            <p class="mono" style="font-size:0.72rem;overflow-wrap:anywhere">chunks_sha256 = 250f9469e76f2708342aed6f1eb777e2bf706375c9419a6357fd3f80a7c2c853</p>
+            <p><b>Safety check:</b> when the chatbot opens the collection it recomputes the fingerprint of the current chunks. If they changed and nobody re-indexed, it refuses to start instead of returning the wrong passages.</p>
+            <p>The payload lets Qdrant filter inside the database, e.g. <code>kind = "text"</code> for Charaka's text only.</p>
+          </aside>
+        </div>
+      </section>
+
+      <div class="part-title">
+        <h2>Part B · Answer a question</h2>
+        <p>Runs every time a user asks. From question to cited answer through search, fusion, the language model and code checks.</p>
+      </div>
+
+      <!-- 07 QUESTION VECTOR -->
+      <section class="step" id="s7">
+        <div class="step-head"><span class="step-no">07</span><div><p class="eyebrow">src/embedder.py · embed_query()</p><h2>Embedding the question</h2></div></div>
+        <p class="lead">The question goes through the <b>same</b> model, so it lands in the same 384-number space as the passages. BGE models search better when a short question carries an instruction, so it is added in front (passages are embedded without it).</p>
+        <div class="cols">
+          <figure class="viz" data-anim>
+            <div class="viz-head"><span class="viz-title">Real query vector</span><button class="replay" type="button">Replay</button></div>
+            <pre class="code"><span class="hl-header">Represent this sentence for searching relevant passages: </span><b>How many bones are there in the human body?</b></pre>
+            <div style="height:12px"></div>
+            <div class="vec" id="qvecBars"><div class="zero"></div></div>
+            <div class="vec-nums" id="qvecNums"></div>
+            <figcaption>First 8 of 384 numbers; this vector also has length 1.</figcaption>
+          </figure>
+          <aside class="formula">
+            <div class="ftitle">Formula</div>
+            <div class="eq"><span class="v">q</span> = normalise( model( instruction + question )<sub>[CLS]</sub> )</div>
+            <p>The question is also sent, as plain words, to keyword search (step 09). Both searches run on every question.</p>
+          </aside>
+        </div>
+      </section>
+
+      <!-- 08 DENSE -->
+      <section class="step" id="s8">
+        <div class="step-head"><span class="step-no">08</span><div><p class="eyebrow">src/retrieve.py · Qdrant query_points()</p><h2>Meaning search: cosine similarity in Qdrant</h2></div></div>
+        <p class="lead">Qdrant compares the question vector with all 2,296 passage vectors and returns the 50 most similar. This finds passages by <em>meaning</em>, even when they use different words from the question.</p>
+        <div class="cols">
+          <figure class="viz" data-anim>
+            <div class="viz-head"><span class="viz-title">Real top 8 by cosine similarity</span><button class="replay" type="button">Replay</button></div>
+            <div class="bars" id="denseBars"></div>
+            <div class="legend"><span><i style="background:var(--leaf)"></i>Charaka's text</span><span><i style="background:var(--saffron)"></i>Translator's note</span><span>Axis from 0 to 1</span></div>
+          </figure>
+          <aside class="formula">
+            <div class="ftitle">Formula · cosine similarity</div>
+            <div class="eq">cos(<span class="v">q</span>, <span class="v">d</span>) = <span class="frac"><span>q · d</span><span>‖q‖ ‖d‖</span></span> = Σ<sub>i=1..384</sub> q<sub>i</sub> d<sub>i</sub></div>
+            <p>Both vectors have length 1, so the denominator is 1. Example: the passage that says “Of bones there are three hundred and sixty” scores <b>0.7961</b>, rank 1.</p>
+            <p>6 of the top 8 come from Sharira Sthana Lesson VII, the lesson that counts the parts of the body.</p>
+          </aside>
+        </div>
+      </section>
+
+      <!-- 09 BM25 -->
+      <section class="step" id="s9">
+        <div class="step-head"><span class="step-no">09</span><div><p class="eyebrow">src/bm25.py · BM25.scores()</p><h2>Keyword search: BM25 word matching</h2></div></div>
+        <p class="lead">In parallel, the question is matched word by word with BM25, the classic search-engine formula. It catches exact Sanskrit terms (“Rasayana”, “pitta”) that the English embedding model barely knows. Spelling is normalised first, so the translator's “Çarira” matches a reader's “Sharira”.</p>
+        <div class="cols">
+          <figure class="viz" data-anim>
+            <div class="viz-head"><span class="viz-title">From question to scored words</span><button class="replay" type="button">Replay</button></div>
+            <div class="tokens" id="bmTokens"></div>
+            <div class="table-scroll"><table class="data" id="idfTable"></table></div>
+            <h3>Why keywords alone are not enough</h3>
+            <div class="compare" id="bmCompare"></div>
+          </figure>
+          <aside class="formula">
+            <div class="ftitle">Formula · BM25</div>
+            <div class="eq">score(D,Q) = Σ<sub>t∈Q</sub> IDF(t) · <span class="frac"><span>f(t,D) · (k₁+1)</span><span>f(t,D) + k₁·(1 − b + b·|D|/avgdl)</span></span></div>
+            <div class="eq">IDF(t) = ln( 1 + <span class="frac"><span>N − n(t) + 0.5</span><span>n(t) + 0.5</span></span> )</div>
+            <ul>
+              <li><b>f(t,D)</b>: times word t appears in passage D</li>
+              <li><b>n(t)</b>: passages containing t; <b>N</b> = 2,296</li>
+              <li><b>|D|</b>: passage length; <b>avgdl</b> = 155.2 words</li>
+              <li><b>k₁ = 1.5</b>: repeats stop counting quickly; <b>b = 0.75</b>: long passages are penalised</li>
+            </ul>
+            <p>Rare words (“bones”, IDF 3.12) count far more than common ones (“body”, IDF 0.95).</p>
+          </aside>
+        </div>
+      </section>
+
+      <!-- 10 RRF -->
+      <section class="step" id="s10">
+        <div class="step-head"><span class="step-no">10</span><div><p class="eyebrow">src/retrieve.py · Retriever.search()</p><h2>Fusion: Reciprocal Rank Fusion ranks the chunks</h2></div></div>
+        <p class="lead">The two rankings are merged. Cosine scores (0 to 1) and BM25 scores (0 to 12+) are on different scales, so the fusion uses <b>ranks</b>, not scores. A passage ranked well by both methods rises to the top. The best 6 go to the language model.</p>
+        <div class="cols">
+          <figure class="viz" data-anim>
+            <div class="viz-head"><span class="viz-title">Real fused top 6</span><button class="replay" type="button">Replay</button></div>
+            <div class="bars" id="rrfBars"></div>
+            <div class="legend"><span><i style="background:var(--indigo)"></i>from meaning rank</span><span><i style="background:var(--accent-fill)"></i>from keyword rank</span><span>Axis from 0 to 1/61 + 1/61</span></div>
+            <div class="table-scroll" style="margin-top:10px"><table class="data" id="rrfTable"></table></div>
+          </figure>
+          <aside class="formula">
+            <div class="ftitle">Formula · RRF</div>
+            <div class="eq">RRF(d) = Σ<sub>method</sub> <span class="frac"><span>1</span><span>k + rank<sub>method</sub>(d)</span></span> , &nbsp;<span class="k">k = 60</span></div>
+            <div class="eq">S1 = <span class="frac"><span>1</span><span>60+1</span></span> + <span class="frac"><span>1</span><span>60+9</span></span> = 0.01639 + 0.01449 = <b>0.03089</b></div>
+            <p>The BM25 winner (about how bones <em>arise</em> from flesh) is only rank 22 by meaning, so it lands second. The correct passage wins because both methods find it.</p>
+            <p>Each ranking goes 50 deep; a passage missing from one list gets nothing from it.</p>
+          </aside>
+        </div>
+      </section>
+
+      <!-- 11 PROMPT -->
+      <section class="step" id="s11">
+        <div class="step-head"><span class="step-no">11</span><div><p class="eyebrow">src/answer.py · label_passages(), build_user_message()</p><h2>Building the prompt: question + labelled passages</h2></div></div>
+        <p class="lead">The 6 passages are numbered <b>S1, S2…</b> for Charaka's text and <b>N1, N2…</b> for translator's notes, each with its citation. The model gets strict rules in a system prompt, then the question and the passages.</p>
+        <div class="cols">
+          <figure class="viz" data-anim>
+            <div class="viz-head"><span class="viz-title">Real user message (start)</span><button class="replay" type="button">Replay</button></div>
+            <div class="rank-list" id="labels" style="margin-bottom:10px"></div>
+            <pre class="code" id="userMsg"></pre>
+          </figure>
+          <aside class="formula">
+            <div class="ftitle">System prompt · the rules</div>
+            <ul id="rules"></ul>
+          </aside>
+        </div>
+      </section>
+
+      <!-- 12 LLM -->
+      <section class="step" id="s12">
+        <div class="step-head"><span class="step-no">12</span><div><p class="eyebrow">src/llm.py · LLM.complete()</p><h2>The language model writes an answer</h2></div></div>
+        <p class="lead">The prompt goes to <b>openai/gpt-oss-20b</b> through NVIDIA's OpenAI-compatible API (the key stays on the server). gpt-oss is a reasoning model: it thinks first, and its reasoning comes back separately and is discarded. Only the answer text is used.</p>
+        <div class="cols">
+          <figure class="viz" data-anim data-typing>
+            <div class="viz-head"><span class="viz-title">Real raw reply from gpt-oss-20b</span><button class="replay" type="button">Replay</button></div>
+            <pre class="code" id="rawReply"></pre>
+            <figcaption>Note the citation written as <span class="hl-bad">[ S1 ]</span>, with spaces. Step 13 handles that.</figcaption>
+          </figure>
+          <aside class="formula">
+            <div class="ftitle">Formula · sampling with temperature</div>
+            <div class="eq">P(token<sub>i</sub>) = <span class="frac"><span>e<sup>z<sub>i</sub> / T</sup></span><span>Σ<sub>j</sub> e<sup>z<sub>j</sub> / T</sup></span></span> , &nbsp;<span class="k">T = 1.0</span></div>
+            <p>The model picks each next token from this distribution. At low temperatures this small model fell into loops (“Kaphaja Kaphaja…”) until it ran out of tokens, so <b>T = 1.0</b> is used, as its makers recommend. Faithfulness comes from the rules and the code checks, not from temperature.</p>
+            <ul>
+              <li>Up to 4,096 output tokens; an empty reply is retried once.</li>
+              <li>Network, key and rate-limit errors become clear messages.</li>
+            </ul>
+          </aside>
+        </div>
+      </section>
+
+      <!-- 13 CHECKS -->
+      <section class="step" id="s13">
+        <div class="step-head"><span class="step-no">13</span><div><p class="eyebrow">src/answer.py · check_citations(), Answerer.ask()</p><h2>Checking the answer in code</h2></div></div>
+        <p class="lead">The rules that matter are enforced by code after the model answers, not left to the model. Each check below was added because the real model broke the rule during evaluation.</p>
+        <figure class="viz" data-anim>
+          <div class="viz-head"><span class="viz-title">Real citation, before → after</span><button class="replay" type="button">Replay</button></div>
+          <div class="panes">
+            <div><div class="pane-label">Model wrote</div><pre class="code" id="beforeCheck"></pre></div>
+            <div class="pane-arrow" aria-hidden="true">→</div>
+            <div class="rise" style="--i:6"><div class="pane-label">After check_citations()</div><pre class="code" id="afterCheck"></pre></div>
+          </div>
+        </figure>
+        <div class="checks" style="margin-top:14px" id="checkList"></div>
+      </section>
+
+      <!-- 14 RESPONSE -->
+      <section class="step" id="s14">
+        <div class="step-head"><span class="step-no">14</span><div><p class="eyebrow">src/api.py · frontend/ (React)</p><h2>The response the user sees</h2></div></div>
+        <p class="lead">The API returns the checked answer, only the sources it actually cites, the warnings and the disclaimer. The React app turns each citation into a chip that opens the passage, badged by whose words it is.</p>
+        <figure class="viz" data-anim>
+          <div class="viz-head"><span class="viz-title">Real final response</span><button class="replay" type="button">Replay</button></div>
+          <div class="chat">
+            <div class="bubble-q rise" style="--i:0"><b>You</b>How many bones are there in the human body?</div>
+            <div class="bubble-a rise" style="--i:2">
+              <p id="finalText"></p>
+              <div class="src"><b>S1</b> &nbsp;Sharira Sthana, Lesson VII (Sharirasankhya), pp. 804-806<span class="kind text">Charaka's text</span>
+                <div style="font-size:0.8rem;color:var(--muted);margin-top:4px">“Of bones there are three hundred and sixty (several pieces), including the teeth, the roots of the teeth in the gums, and the nails.”</div>
+              </div>
+              <p class="disc">Educational use only, not medical advice. It does not diagnose or recommend treatment. Consult a qualified practitioner.</p>
+            </div>
+          </div>
+        </figure>
+        <div class="callout"><b>What the checks cannot catch.</b> The number is right (360, as in S1), but the model also wrote “twenty-seven pieces of bone in each of the sections”, which is not in the passage. The checks prove that every citation points to a real passage; they cannot prove every sentence is supported. That is why the sources are always shown, so a reader can verify the answer against the text in one click.</div>
+      </section>
+
+      <!-- EVAL -->
+      <section class="step" id="eval">
+        <div class="step-head"><span class="step-no">✓</span><div><p class="eyebrow">scripts/eval_retrieval.py · scripts/eval_answers.py</p><h2>How well it works</h2></div></div>
+        <p class="lead">Measured on 52 questions whose correct lesson was checked by hand, plus 10 questions the book cannot answer (COVID-19, insulin doses, chemotherapy…).</p>
+        <div class="cols">
+          <div>
+            <h3>Search (hybrid)</h3>
+            <div class="scores">
+              <div class="score"><b>85%</b><span>hit@1: right lesson ranked first</span></div>
+              <div class="score"><b>94%</b><span>hit@5: right lesson in the top 5</span></div>
+              <div class="score"><b>0.89</b><span>MRR</span></div>
+            </div>
+            <h3>Answers</h3>
+            <div class="scores">
+              <div class="score"><b>94%</b><span>cite a passage from the right lesson (49/52)</span></div>
+              <div class="score"><b>0</b><span>uncited answers</span></div>
+              <div class="score"><b>0</b><span>invented citations</span></div>
+              <div class="score"><b>10/10</b><span>unanswerable questions refused</span></div>
+            </div>
+          </div>
+          <aside class="formula">
+            <div class="ftitle">Formulas · metrics</div>
+            <div class="eq">hit@k = <span class="frac"><span>questions with a correct passage in top k</span><span>all questions</span></span></div>
+            <div class="eq">MRR = <span class="frac"><span>1</span><span>|Q|</span></span> Σ<sub>q∈Q</sub> <span class="frac"><span>1</span><span>rank of first correct passage</span></span></div>
+            <p>Hybrid beats either method alone: meaning only scores 92% hit@5 (MRR 0.84), keywords only 85% (MRR 0.74). Questions in everyday words are the weak spot (70% hit@5), because the 1890s translation uses different vocabulary.</p>
+          </aside>
+        </div>
+      </section>
+
+      <footer>
+        Source text: Source Library transcription of the Charaka-Samhita, English translation by Avinash Chandra Kaviratna (Calcutta, 1890 onward), CC BY-SA 4.0. Translator's notes are marked as such and are not Charaka's words. This is an educational project; nothing here is medical advice.
+      </footer>
+    </main>
+  </div>
+</div>
+
+<script>
+// ---- real values captured from the running system --------------------------
+const D = {
+  rawHeader: `════════════════════════════════════════════════════════════
+SOURCE LIBRARY
+Digitizing and translating ancient texts
+for scholars, seekers and AI systems.
+════════════════════════════════════════════════════════════
+
+Title: Charaka-Samhita
+Author: Charaka; Avinash Chandra Kaviratna (trans.)
+Original Language: English
+Published: 1890
+Source Copy: Bibliothèque interuniversitaire de santé (Paris)
+
+Source: https://sourcelibrary.org/book/69ef217fb3e2d3a0927f3054
+Downloaded: 2026-10-09
+License: CC BY-SA 4.0 (Creative Commons Attribution-ShareAlike)
+
+────────────────────────────────────────────────────────────
+
+CONTENTS: 1951 of 1988 pages translated
+          1988 of 1988 pages transcribed
+
+────────────────────────────────────────────────────────────
+[Page 1]
+…
+[Page 2]
+…
+[Page 1988]`,
+  rawPage: `[Page 11]
+
+<scan-quality>good</scan-quality>
+<language>English</language>
+<script>printed<\/script>
+<page-type>text</page-type>
+
+# CHARAKA-SAMHITĀ.
+
+---
+
+## THE PLACE OF APHORISMS.
+
+### LESSON I.
+
+So then we will explain the lesson about Longevity. Even this was said by the illustrious son of Atri.*
+
+Desirous of long life, Bharadwāja of austere penances repaired to the supreme deity Indra, regarding him worthy of court.¹ …`,
+  cleanMain: `CHARAKA-SAMHITĀ.
+
+THE PLACE OF APHORISMS.
+
+LESSON I.
+
+So then we will explain the lesson about Longevity. Even this was said by the illustrious son of Atri.
+
+Desirous of long life, Bharadwāja of austere penances repaired to the supreme deity Indra, regarding him worthy of court. …`,
+  cleanNotes: "It would seem from the words athātah that this treatise follows a previous one on a cognate subject. …",
+  pageMeta: [["scan_page", "11"], ["page_type", "text"], ["scan_quality", "good"], ["printed_page", "null"], ["flags", "[missing_printed_page]"]],
+  pageTypes: [["text", 1727], ["preface", 107], ["title-page", 52], ["blank", 39], ["toc", 28], ["appendix", 15], ["notice", 14], ["errata", 3], ["advertisement", 3]],
+  fixes: [["Sutra XV", 246, "SECTION XV."], ["Sutra XVI", 260, "SECTION XVI."], ["Sutra XIX", 310, "LESSON IXX."], ["Indriya I", 1107, "I N D R I Y A S T H A N A M."]],
+  sthanas: [
+    { name: "Sutra Sthana", subject: "general principles", lessons: 30, first: 11, last: 584, color: "#3b47b0" },
+    { name: "Vimana Sthana", subject: "specific measures and assessment", lessons: 8, first: 590, last: 836, color: "#6a4fb3" },
+    { name: "Sharira Sthana", subject: "the body", lessons: 8, first: 837, last: 1106, color: "#23744a" },
+    { name: "Indriya Sthana", subject: "signs of prognosis", lessons: 12, first: 1107, last: 1191, color: "#8a6a10" },
+    { name: "Nidana Sthana", subject: "causes and diagnosis of disease", lessons: 8, first: 1192, last: 1289, color: "#b9520f" },
+    { name: "Chikitsa Sthana", subject: "treatment", lessons: 22, first: 1297, last: 1986, color: "#a8231b" },
+  ],
+  paras: [
+    ["ctx", 21, "Context line: “Charaka Samhita, Sharira Sthana, Lesson VII (Sharirasankhya)”"],
+    ["", 83, "“These are the six tissues which exist covering the whole body…”"],
+    ["", 31, "“Of bones there are three hundred and sixty (several pieces)…”"],
+    ["", 295, "“These are 32 tooth-roots; 32 teeth; 20 nails; 20 roots of fingers…”"],
+    ["", 40, "“There are five seats of the senses…”"],
+    ["", 32, "“There are five senses of knowledge…”"],
+    ["spec", 2, "[CLS] and [SEP]"],
+  ],
+  tokSanskrit: ["[CLS]", "car", "##ira", "-", "vic", "##haya", "[SEP]"],
+  tokEnglish: ["[CLS]", "of", "bones", "there", "are", "three", "hundred", "and", "sixty", "[SEP]"],
+  vec: [-0.0021, -0.0434, 0.0437, -0.0285, -0.0032, 0.0243, 0.036, -0.0066],
+  qvec: [0.0003, -0.0209, 0.0177, -0.0635, -0.0344, 0.0251, 0.0076, 0.0131],
+  pointCard: `{
+  "id": 1132,
+  "vector": [-0.0021, -0.0434, 0.0437, -0.0285,
+             -0.0032, 0.0243, 0.036, -0.0066, …],  // 384 numbers
+  "payload": {
+    "chunk_id": "sharira-07-text-002",
+    "kind": "text",
+    "sthana": "sharira", "lesson": 7,
+    "lesson_title": "Sharirasankhya",
+    "scan_pages": [1022, 1023, 1024],
+    "printed_pages": ["804", "805", "806"],
+    "size": 504, "word_count": 319,
+    "attribution": "Charaka Samhita, English translation by A. C. Kaviratna",
+    "text": "These are the six tissues which exist covering…"
+  }
+}`,
+  dense: [
+    ["Sharira VII (Sharirasankhya), pp. 804-806", "text", 0.7961],
+    ["Sharira VII (Sharirasankhya), pp. 807-808", "text", 0.7272],
+    ["Sharira VII, translator's note, pp. 804-805", "note", 0.6828],
+    ["Sharira VII (Sharirasankhya), pp. 806-807", "text", 0.6808],
+    ["Vimana VIII (Rogabhishagjitiya), pp. 605-606", "text", 0.6574],
+    ["Sharira VII (Sharirasankhya), p. 808", "text", 0.6568],
+    ["Sharira VI, translator's note, pp. 782-784", "note", 0.6551],
+    ["Sharira VII, translator's note, pp. 808-809", "note", 0.6465],
+  ],
+  bmTokens: [["How", 0], ["many", 1], ["bones", 1], ["are", 0], ["there", 0], ["in", 0], ["the", 0], ["human", 1], ["body", 1], ["?", 0]],
+  idf: [["many", 244, 2.24], ["bones", 101, 3.119], ["human", 112, 3.016], ["body", 892, 0.945]],
+  bmCompare: [
+    { title: "Sharira VII · “Of bones there are three hundred and sixty…”", sub: "|D| = 213 words · the right answer", rank: "BM25 rank 9", total: 7.846,
+      rows: [["many", 0, 0], ["bones", 11, 6.64], ["human", 0, 0], ["body", 2, 1.206]] },
+    { title: "Chikitsa XV (Grahani) · “…from flesh and fat, which are soft, bones arise…”", sub: "|D| = 171 words · not about the number", rank: "BM25 rank 1", total: 12.144,
+      rows: [["many", 0, 0], ["bones", 7, 6.337], ["human", 3, 4.903], ["body", 1, 0.904]] },
+  ],
+  rrf: [
+    ["S1", "Sharira VII (Sharirasankhya), pp. 804-806", 1, 9],
+    ["S2", "Chikitsa XV (Grahani Chikitsa), scan pp. 1754-1755", 22, 1],
+    ["S3", "Vimana VIII (Rogabhishagjitiya), pp. 602-603", 10, 11],
+    ["S4", "Sharira VII (Sharirasankhya), pp. 807-808", 2, 29],
+    ["S5", "Sutra XI (Tistraishaniya), pp. 127-128", 15, 23],
+    ["S6", "Sharira IV (Mahatigarbhavakranti), pp. 753-755", 21, 19],
+  ],
+  userMsg: `Question: How many bones are there in the human body?
+
+Passages:
+
+[S1] Sharira Sthana, Lesson VII (Sharirasankhya), pp. 804-806 (Charaka's text)
+These are the six tissues which exist covering the whole body …
+Of bones there are three hundred and sixty (several pieces), including the teeth, the roots of the teeth in the gums, and the nails. …
+
+[S2] Chikitsa Sthana, Lesson XV (Grahani Chikitsa), scan pp. 1754-1755 (Charaka's text)
+…
+
+[S6] Sharira Sthana, Lesson IV (Mahatigarbhavakranti), pp. 753-755 (Charaka's text)
+…`,
+  rules: [
+    "Use only the passages; add nothing from the model's own knowledge.",
+    "Cite every statement as [S1] or [S2][N1]: square brackets, nothing else.",
+    "N passages are the translator's notes, not Charaka's words: say so when using one.",
+    "If the passages do not answer, reply exactly NOT_IN_TEXT. Also for modern medicine, drugs or procedures (chemotherapy, vaccines, insulin).",
+    "Educational only: explain the text; never diagnose or recommend treatment or doses.",
+    "Plain English, short; keep the text's Sanskrit terms. Reasoning: medium.",
+  ],
+  rawReply: "The text states that the human body contains twenty‑seven pieces of bone in each of the sections that it enumerates – in all, the total number given is three hundred and sixty parts, counting the teeth, the roots of the teeth, and the nails as bone‑like elements.\n[ S1 ]",
+  checks: [
+    ["Every citation form becomes [S1]", "Seen from gpt-oss: 【S1】, 【S1†L3】, (S3), [{S5}], bare S2, invisible zero-width characters, and here [ S1 ]."],
+    ["Citations to passages never given are removed", "And reported, so an invented source can never reach the user (0 in the final evaluation)."],
+    ["NOT_IN_TEXT becomes a standard reply", "“The Charaka Samhita does not answer this…”, with what the translation covers; no sources shown. Without passages, the model is not called at all."],
+    ["Translator's notes are flagged by code", "If any N passage is cited, a note that it is not Charaka's words is always added: the model said so itself in only 1 of 4 such answers."],
+    ["Uncited answers are marked", "An answer that cites nothing gets a warning that it cannot be checked against the text."],
+    ["Every reply ends with the disclaimer", "Educational use only, not medical advice."],
+    ["Only cited sources are returned", "The user sees S1 here, not all 6 passages the model was given."],
+  ],
+  finalText: "The text states that the human body contains twenty‑seven pieces of bone in each of the sections that it enumerates – in all, the total number given is three hundred and sixty parts, counting the teeth, the roots of the teeth, and the nails as bone‑like elements.",
+};
+
+const $ = (s) => document.querySelector(s);
+const el = (tag, cls, text) => { const e = document.createElement(tag); if (cls) e.className = cls; if (text !== undefined) e.textContent = text; return e; };
+
+// ---- overview + rail ---------------------------------------------------------
+const stagesA = [["s1", "Raw file"], ["s2", "Clean pages"], ["s3", "Lessons"], ["s4", "Chunks"], ["s5", "Embeddings"], ["s6", "Qdrant"]];
+const stagesB = [["s7", "Question vector"], ["s8", "Meaning search"], ["s9", "BM25 search"], ["s10", "RRF fusion"], ["s11", "Prompt"], ["s12", "gpt-oss-20b"], ["s13", "Code checks"], ["s14", "Answer"]];
+function fillLane(id, stages, offset) {
+  const lane = $(id);
+  stages.forEach(([sid, name], i) => {
+    if (i) lane.append(el("span", "arrow", "→"));
+    const a = el("a", "node", name); a.href = "#" + sid; a.style.setProperty("--i", offset + i); lane.append(a);
+  });
+}
+fillLane("#laneA", stagesA, 0);
+fillLane("#laneB", stagesB, stagesA.length);
+function fillRail(id, stages, offset) {
+  stages.forEach(([sid, name], i) => {
+    const li = el("li"); const a = el("a"); a.href = "#" + sid;
+    a.append(el("span", "", String(offset + i + 1).padStart(2, "0")), document.createTextNode(name));
+    li.append(a); $(id).append(li);
+  });
+}
+fillRail("#railA", stagesA, 0);
+fillRail("#railB", stagesB, stagesA.length);
+
+// ---- 01 raw header -----------------------------------------------------------
+(() => {
+  const pre = $("#rawHeader");
+  D.rawHeader.split("\n").forEach((line, i) => {
+    const span = el("span", "ln", line || " ");
+    if (/^\[Page \d+\]$/.test(line)) span.classList.add("hl-marker");
+    else if (line !== "…") { span.classList.add("hl-header", "strike", "gone"); span.style.setProperty("--i", i); }
+    pre.append(span);
+  });
+})();
+
+// ---- 02 page ----------------------------------------------------------------
+(() => {
+  const pre = $("#rawPage");
+  D.rawPage.split("\n").forEach((line, i) => {
+    const span = el("span", "ln", line || " ");
+    if (/^\[Page \d+\]$/.test(line)) span.classList.add("hl-marker");
+    else if (/^<[^>]+>.*<\/[^>]+>$/.test(line)) { span.classList.add("hl-tag", "strike", "gone"); span.style.setProperty("--i", i); }
+    else if (/^(#+ |---$)/.test(line)) { span.classList.add("hl-tag"); }
+    pre.append(span);
+  });
+  const clean = $("#cleanPage");
+  clean.append(el("span", "ln", "main_text:"), el("span", "ln", D.cleanMain), el("span", "ln", " "),
+               el("span", "ln hl-note", "notes_text:"), el("span", "ln hl-note", D.cleanNotes));
+  const dl = $("#pageMeta");
+  D.pageMeta.forEach(([k, v]) => { dl.append(el("dt", "", k), el("dd", "", v)); });
+
+  const max = D.pageTypes[0][1];
+  D.pageTypes.forEach(([name, n], i) => {
+    const row = el("div", "bar-row");
+    const track = el("div", "track"); const fill = el("div", "fill grow" + (name === "text" ? " leaf" : ""));
+    fill.style.width = (n / max * 100) + "%"; fill.style.setProperty("--i", i); track.append(fill);
+    row.append(el("span", "name", name), track, el("span", "val", n.toLocaleString("en")));
+    $("#pageTypes").append(row);
+  });
+})();
+
+// ---- 03 lessons -------------------------------------------------------------
+(() => {
+  $("#wrapperNote").textContent = "Result: 103 such pages left out, e.g. scan page 273, a reader's letter: “Fascicule 4 is very interesting. What I admire most in Charaka is…”";
+  $("#fixes").textContent = D.fixes.map(([l, p, line]) => `${l} (p. ${p}: “${line}”)`).join("; ");
+  const total = 1986 - 11 + 1;
+  const tl = $("#timeline");
+  const table = $("#sthanaTable");
+  table.innerHTML = "<thead><tr><th>Division (print order)</th><th>About</th><th style='text-align:right'>Lessons</th><th style='text-align:right'>Scan pages</th></tr></thead>";
+  const body = el("tbody");
+  D.sthanas.forEach((s, i) => {
+    const seg = el("div", "seg grow", s.lessons + "");
+    seg.style.width = ((s.last - s.first + 1) / total * 100) + "%";
+    seg.style.background = s.color; seg.style.setProperty("--i", i);
+    seg.title = `${s.name}: pages ${s.first}-${s.last}, ${s.lessons} lessons`;
+    tl.append(seg);
+    const tr = el("tr");
+    const name = el("td"); const sw = el("span", "swatch"); sw.style.background = s.color; name.append(sw, document.createTextNode(s.name));
+    tr.append(name, el("td", "", s.subject), el("td", "num", String(s.lessons)), el("td", "num", `${s.first}–${s.last}`));
+    body.append(tr);
+  });
+  table.append(body);
+})();
+
+// ---- 04 chunking ------------------------------------------------------------
+(() => {
+  const box = $("#paras");
+  D.paras.forEach(([kind, n, text], i) => {
+    const p = el("div", "para rise " + kind); p.style.setProperty("--i", i);
+    p.append(el("span", "", text), el("b", "", n + " tok"));
+    box.append(p);
+  });
+  const next = el("div", "para out rise"); next.style.setProperty("--i", D.paras.length);
+  next.append(el("span", "", "Next paragraph → does not fit, starts the next chunk"), el("b", "", "only 8 tok left"));
+  box.append(next);
+  $("#level").style.height = (504 / 530 * 100) + "%";
+  $("#level").style.setProperty("--i", 1);
+  const tok = (id, list) => list.forEach((t) => $(id).append(el("span", "tok" + (t.startsWith("[") ? " special" : t.startsWith("##") || t === "car" || t === "vic" ? " piece" : ""), t)));
+  tok("#tokSanskrit", D.tokSanskrit);
+  tok("#tokEnglish", D.tokEnglish);
+})();
+
+// ---- 05 + 07 vectors --------------------------------------------------------
+function drawVector(barsId, numsId, values) {
+  const bars = $(barsId), nums = $(numsId);
+  const max = 0.07;
+  values.forEach((v, i) => {
+    const col = el("div", "col");
+    const bar = el("div", "barv growY " + (v >= 0 ? "pos" : "neg"));
+    bar.style.height = (Math.abs(v) / max * 50) + "%"; bar.style.setProperty("--i", i);
+    col.append(bar); bars.append(col);
+    nums.append(el("span", "", v.toFixed(4)));
+  });
+}
+drawVector("#vecBars", "#vecNums", D.vec);
+drawVector("#qvecBars", "#qvecNums", D.qvec);
+(() => {
+  const strip = $("#strip");
+  for (let i = 0; i < 384; i++) strip.append(el("i", i < 8 ? "real" : ""));
+})();
+
+// ---- 06 qdrant ---------------------------------------------------------------
+$("#pointCard").textContent = D.pointCard;
+const canvas = $("#pointsCanvas");
+let pointsFrame = 0;
+function drawPoints(progress) {
+  const dpr = window.devicePixelRatio || 1;
+  const w = canvas.clientWidth, h = canvas.clientHeight;
+  if (!w) return;
+  canvas.width = w * dpr; canvas.height = h * dpr;
+  const ctx = canvas.getContext("2d"); ctx.scale(dpr, dpr);
+  const css = getComputedStyle(document.documentElement);
+  const dot = css.getPropertyValue("--indigo").trim(), hot = css.getPropertyValue("--accent-fill").trim();
+  const total = 2296, cols = Math.ceil(Math.sqrt(total * w / h)), rows = Math.ceil(total / cols);
+  const gx = w / cols, gy = h / rows, r = Math.max(0.8, Math.min(gx, gy) * 0.32);
+  const shown = Math.floor(total * progress);
+  ctx.globalAlpha = 0.45; ctx.fillStyle = dot;
+  for (let i = 0; i < shown; i++) {
+    const x = (i % cols + 0.5) * gx, y = (Math.floor(i / cols) + 0.5) * gy;
+    ctx.beginPath(); ctx.arc(x, y, r, 0, Math.PI * 2); ctx.fill();
+  }
+  if (progress >= 1) {
+    const i = 1132, x = (i % cols + 0.5) * gx, y = (Math.floor(i / cols) + 0.5) * gy;
+    ctx.globalAlpha = 1; ctx.fillStyle = hot;
+    ctx.beginPath(); ctx.arc(x, y, r * 3.2, 0, Math.PI * 2); ctx.fill();
+    ctx.strokeStyle = hot; ctx.lineWidth = 1.5;
+    ctx.beginPath(); ctx.arc(x, y, r * 6, 0, Math.PI * 2); ctx.stroke();
+  }
+}
+function animatePoints() {
+  cancelAnimationFrame(pointsFrame);
+  if (matchMedia("(prefers-reduced-motion: reduce)").matches) { drawPoints(1); return; }
+  const start = performance.now();
+  const step = (t) => { const p = Math.min(1, (t - start) / 1200); drawPoints(p); if (p < 1) pointsFrame = requestAnimationFrame(step); };
+  pointsFrame = requestAnimationFrame(step);
+}
+drawPoints(1);
+addEventListener("resize", () => drawPoints(1));
+matchMedia("(prefers-color-scheme: dark)").addEventListener?.("change", () => drawPoints(1));
+
+// ---- 08 dense ----------------------------------------------------------------
+D.dense.forEach(([name, kind, score], i) => {
+  const row = el("div", "bar-row");
+  const track = el("div", "track"); const fill = el("div", "fill grow " + (kind === "note" ? "saffron" : "leaf"));
+  fill.style.width = (score * 100) + "%"; fill.style.setProperty("--i", i); track.append(fill);
+  const label = el("span", "name", `${i + 1}. ${name}`); label.title = name;
+  row.append(label, track, el("span", "val", score.toFixed(4)));
+  $("#denseBars").append(row);
+});
+
+// ---- 09 bm25 -------------------------------------------------------------------
+D.bmTokens.forEach(([t, kept], i) => {
+  const s = el("span", "tok rise" + (kept ? " piece" : " special"), kept ? t.toLowerCase() : t);
+  if (!kept) s.style.textDecoration = "line-through";
+  s.style.setProperty("--i", i);
+  $("#bmTokens").append(s);
+});
+$("#idfTable").innerHTML = "<thead><tr><th>Term t</th><th style='text-align:right'>n(t) passages</th><th style='text-align:right'>IDF(t)</th></tr></thead>";
+const idfBody = el("tbody");
+D.idf.forEach(([t, n, idf]) => { const tr = el("tr"); tr.append(el("td", "mono", t), el("td", "num", String(n)), el("td", "num", idf.toFixed(3))); idfBody.append(tr); });
+$("#idfTable").append(idfBody);
+D.bmCompare.forEach((c, ci) => {
+  const box = el("div");
+  box.append(el("h4", "", c.title), el("div", "sub", `${c.sub} · ${c.rank}`));
+  box.append(Object.assign(el("div", "term-row"), { innerHTML: "<span>term</span><span>f</span><span>contribution</span><span></span>" }));
+  c.rows.forEach(([t, f, contrib], i) => {
+    const row = el("div", "term-row");
+    const track = el("div", "track"); const fill = el("div", "fill grow"); fill.style.width = (contrib / 6.64 * 100 * 0.95) + "%"; fill.style.setProperty("--i", ci * 4 + i); track.append(fill);
+    row.append(el("span", "", t), el("span", "", String(f)), track, el("span", "", contrib.toFixed(2)));
+    box.append(row);
+  });
+  box.append(el("div", "total", "score = " + c.total.toFixed(3)));
+  $("#bmCompare").append(box);
+});
+
+// ---- 10 rrf ------------------------------------------------------------------
+(() => {
+  const max = 2 / 61;
+  const tbody = el("tbody");
+  $("#rrfTable").innerHTML = "<thead><tr><th>Label</th><th style='text-align:right'>meaning rank</th><th style='text-align:right'>keyword rank</th><th style='text-align:right'>1/(60+r₁) + 1/(60+r₂)</th></tr></thead>";
+  D.rrf.forEach(([label, name, rd, rb], i) => {
+    const a = 1 / (60 + rd), b = 1 / (60 + rb);
+    const row = el("div", "bar-row");
+    const track = el("div", "track");
+    const fa = el("div", "fill part indigo grow"); fa.style.width = (a / max * 100) + "%"; fa.style.setProperty("--i", i);
+    const fb = el("div", "fill part grow"); fb.style.width = (b / max * 100) + "%"; fb.style.setProperty("--i", i + 0.5);
+    track.append(fa, fb);
+    const lab = el("span", "name", `${label} · ${name}`); lab.title = name;
+    row.append(lab, track, el("span", "val", (a + b).toFixed(5)));
+    $("#rrfBars").append(row);
+    const tr = el("tr");
+    tr.append(el("td", "", label), el("td", "num", String(rd)), el("td", "num", String(rb)),
+              el("td", "num", `${a.toFixed(5)} + ${b.toFixed(5)} = ${(a + b).toFixed(5)}`));
+    tbody.append(tr);
+  });
+  $("#rrfTable").append(tbody);
+})();
+
+// ---- 11 prompt -------------------------------------------------------------------
+D.rrf.forEach(([label, name], i) => {
+  const row = el("div", "rank-row rise"); row.style.setProperty("--i", i);
+  const k = el("span", "kind text", "Charaka's text");
+  row.append(el("span", "r", label), el("span", "c", name), k, el("span", "s", ""));
+  $("#labels").append(row);
+});
+$("#userMsg").textContent = D.userMsg;
+D.rules.forEach((r) => $("#rules").append(el("li", "", r)));
+
+// ---- 12 + 13 + 14 model reply and checks ------------------------------------
+function withCitation(pre, text, citeClass) {
+  pre.textContent = "";
+  const [body, cite] = text.split("\n");
+  pre.append(document.createTextNode(body + "\n"), el("span", citeClass, cite));
+}
+withCitation($("#rawReply"), D.rawReply, "hl-bad");
+withCitation($("#beforeCheck"), D.rawReply, "hl-bad");
+withCitation($("#afterCheck"), D.rawReply.replace("[ S1 ]", "[S1]"), "hl-cite");
+D.checks.forEach(([title, text], i) => {
+  const c = el("div", "check rise"); c.style.setProperty("--i", i);
+  const body = el("div"); body.append(el("b", "", title), document.createTextNode(text));
+  c.append(el("span", "tick", "✓"), body);
+  $("#checkList").append(c);
+});
+(() => {
+  const p = $("#finalText");
+  p.textContent = D.finalText + " ";
+  p.append(el("span", "chip", "S1"));
+})();
+
+function typeReply() {
+  const pre = $("#rawReply");
+  if (matchMedia("(prefers-reduced-motion: reduce)").matches) return;
+  const full = D.rawReply; let n = 0;
+  pre.textContent = ""; pre.classList.add("typing");
+  const timer = setInterval(() => {
+    n += 4;
+    if (n >= full.length) { clearInterval(timer); pre.classList.remove("typing"); withCitation(pre, full, "hl-bad"); return; }
+    pre.textContent = full.slice(0, n);
+  }, 18);
+}
+
+// ---- play animations when a figure scrolls into view; Replay replays ---------
+function play(fig) {
+  fig.classList.remove("playing");
+  void fig.offsetWidth;            // restart CSS animations
+  fig.classList.add("playing");
+  if (fig.querySelector("#pointsCanvas")) animatePoints();
+  if (fig.hasAttribute("data-typing")) typeReply();
+}
+document.querySelectorAll("figure[data-anim]").forEach((fig) => {
+  fig.querySelector(".replay")?.addEventListener("click", () => play(fig));
+});
+if ("IntersectionObserver" in window) {
+  const seen = new IntersectionObserver((entries) => {
+    entries.forEach((e) => { if (e.isIntersecting) { play(e.target); seen.unobserve(e.target); } });
+  }, { threshold: 0.35 });
+  document.querySelectorAll("figure[data-anim]").forEach((f) => seen.observe(f));
+
+  const links = new Map([...document.querySelectorAll(".rail a")].map((a) => [a.getAttribute("href").slice(1), a]));
+  const active = new IntersectionObserver((entries) => {
+    entries.forEach((e) => {
+      if (!e.isIntersecting) return;
+      links.forEach((a) => a.classList.remove("active"));
+      links.get(e.target.id)?.classList.add("active");
+    });
+  }, { rootMargin: "-30% 0px -60% 0px" });
+  document.querySelectorAll("section.step").forEach((s) => active.observe(s));
+}
+</script>
+</body>
+</html>

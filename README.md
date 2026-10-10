@@ -24,6 +24,13 @@ does not contain an answer.
      SHA-256 of the content from `[Page 1]` onward. The download header is
      excluded because it contains the download date.
 
+## How it works
+
+Open [docs/system-flow.html](docs/system-flow.html) in a browser: an animated,
+step-by-step walk through the whole system, from the raw book file to a cited
+answer, with the formulas and real data from the pipeline (one example
+question traced through all 14 stages).
+
 ## Pipeline
 
     python -m scripts.verify_source   # check the source file
