@@ -30,7 +30,7 @@ does not contain an answer.
     python -m src.ingest              # -> data/processed/pages.jsonl + quality report
     python -m src.structure           # -> data/processed/lesson_pages.jsonl + structure.json
     python -m src.chunk               # -> data/processed/chunks.jsonl
-    python -m src.index               # -> storage/index/ (embeddings, ~5-10 min on CPU)
+    python -m src.index               # -> storage/index/qdrant/ (vector DB, ~5-10 min on CPU)
     python -m src.retrieve "What urges should not be suppressed?"
     python -m scripts.eval_retrieval  # search quality on data/eval/retrieval_questions.jsonl
 
@@ -58,12 +58,17 @@ them must tell the user so.
 **Search (Phase 4).** Hybrid retrieval over all chunks:
 - *Meaning-based:* every chunk is embedded once with `BAAI/bge-small-en-v1.5`,
   run locally through `fastembed` (free, no API key, downloaded once into
-  `storage/models/`). A question is embedded the same way and compared with
-  every chunk (cosine similarity).
+  `storage/models/`), and stored in a **Qdrant** vector database
+  (`storage/index/qdrant/`, collection `charaka_chunks`). Qdrant runs embedded
+  in Python, so there is no server to install. Each chunk is one point: its
+  vector plus its fields (lesson, pages, kind, text) as payload, so the
+  database can filter, e.g. Charaka's text only. A question is embedded the
+  same way and Qdrant returns the most similar chunks (cosine similarity).
 - *Keyword-based:* BM25 (`src/bm25.py`) finds exact terms such as "Rasayana".
   Spellings are normalised so "Çarira", "Sharira" and "sarira" match.
 - The two rankings are merged with Reciprocal Rank Fusion.
 
+The collection's metadata records the model and a fingerprint of the chunks;
 `src/index.py` refuses an index built from different chunks or another model,
 so re-chunking without re-indexing fails loudly. Every result shows its
 citation and whether it is Charaka's text or a translator's note.
@@ -83,4 +88,4 @@ citation and whether it is Charaka's text or a translator's note.
 Phase 1 — source verification and page ingestion.
 Phase 2 — sthana / lesson structure.
 Phase 3 — chunking.
-Phase 4 — embeddings and hybrid search.
+Phase 4 — embeddings, Qdrant vector database and hybrid search.

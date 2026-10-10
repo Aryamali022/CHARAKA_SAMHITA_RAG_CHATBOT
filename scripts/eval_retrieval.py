@@ -52,12 +52,15 @@ def main(argv: list[str] | None = None) -> int:
     retriever = Retriever.load()
     ranks = {m: [] for m in METHODS}
     top = {}
-    for q in questions:
-        for method in METHODS:
-            results = retriever.search(q["question"], k=DEPTH, method=method)
-            ranks[method].append(first_correct_rank(results, q["lessons"]))
-            if method == "hybrid":
-                top[q["id"]] = results[0]
+    try:
+        for q in questions:
+            for method in METHODS:
+                results = retriever.search(q["question"], k=DEPTH, method=method)
+                ranks[method].append(first_correct_rank(results, q["lessons"]))
+                if method == "hybrid":
+                    top[q["id"]] = results[0]
+    finally:
+        retriever.close()
 
     styles = sorted({q["style"] for q in questions})
     per_style = ", ".join(f"{sum(q['style'] == s for q in questions)} {s}" for s in styles)

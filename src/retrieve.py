@@ -1,9 +1,10 @@
 """Phase 4: find the passages that best answer a question.
 
 Hybrid search:
-- meaning-based: the question's embedding is compared with every chunk's
-  embedding (cosine similarity), so "how to live long" can find a passage
-  about longevity that shares no words with the question;
+- meaning-based: the question's embedding is sent to the Qdrant vector
+  database, which returns the chunks with the most similar embeddings
+  (cosine similarity), so "how to live long" can find a passage about
+  longevity that shares no words with the question;
 - keyword-based: BM25 over the same chunks, so exact Sanskrit terms
   ("Rasayana", "pitta") are found even when the embedding model does not
   understand them;
@@ -23,11 +24,12 @@ from dataclasses import dataclass
 from pathlib import Path
 
 import numpy as np
+from qdrant_client import QdrantClient, models
 
 from src import config
 from src.bm25 import BM25, tokenize
 from src.chunk import Chunk, embedding_text, load_chunks
-from src.index import load_index
+from src.index import COLLECTION, open_index
 from src.structure import lesson_label
 
 RRF_K = 60          # standard constant from the RRF paper; damps the weight of top ranks
@@ -60,20 +62,18 @@ def citation(chunk: Chunk) -> str:
     return f"{label}, {pages}"
 
 
-def _top(scores: np.ndarray, allowed: np.ndarray, n: int, positive_only: bool = False) -> list[int]:
-    scores = np.where(allowed, scores, -np.inf)
-    if positive_only:
-        scores = np.where(scores > 0, scores, -np.inf)
+def _top_keyword(scores: np.ndarray, allowed: np.ndarray, n: int) -> list[int]:
+    """Indices of the n best positive BM25 scores among allowed chunks."""
+    scores = np.where(allowed & (scores > 0), scores, -np.inf)
     order = np.argsort(-scores, kind="stable")[:n]
     return [int(i) for i in order if np.isfinite(scores[i])]
 
 
 class Retriever:
-    def __init__(self, chunks: list[Chunk], vectors: np.ndarray, embedder):
-        if len(chunks) != len(vectors):
-            raise ValueError("one vector per chunk is required")
+    def __init__(self, chunks: list[Chunk], store: QdrantClient, embedder):
+        """chunks[i] must be the chunk stored as Qdrant point i (see src/index.py)."""
         self.chunks = chunks
-        self.vectors = vectors
+        self.store = store
         self.embedder = embedder
         self.bm25 = BM25([tokenize(embedding_text(c)) for c in chunks])
         self._kinds = np.array([c.kind for c in chunks])
@@ -85,7 +85,11 @@ class Retriever:
             from src.embedder import Embedder
             embedder = Embedder()
         chunks = load_chunks(chunks_path)
-        return cls(chunks, load_index(chunks, embedder.model_name, index_dir), embedder)
+        return cls(chunks, open_index(chunks, embedder.model_name, index_dir), embedder)
+
+    def close(self) -> None:
+        """Release the database (only one process can open it at a time)."""
+        self.store.close()
 
     def search(self, question: str, k: int = 5, method: str = "hybrid",
                kinds: tuple[str, ...] = ("text", "note")) -> list[Result]:
@@ -95,11 +99,16 @@ class Retriever:
 
         dense: list[int] = []
         if method in ("hybrid", "dense"):
-            similarity = self.vectors @ self.embedder.embed_query(question)
-            dense = _top(similarity, allowed, CANDIDATES)
+            hits = self.store.query_points(
+                COLLECTION, query=self.embedder.embed_query(question).tolist(), limit=CANDIDATES,
+                query_filter=models.Filter(must=[
+                    models.FieldCondition(key="kind", match=models.MatchAny(any=list(kinds)))]),
+                with_payload=False,
+            ).points
+            dense = [int(hit.id) for hit in hits]
         keyword: list[int] = []
         if method in ("hybrid", "bm25"):
-            keyword = _top(self.bm25.scores(tokenize(question)), allowed, CANDIDATES, positive_only=True)
+            keyword = _top_keyword(self.bm25.scores(tokenize(question)), allowed, CANDIDATES)
 
         dense_rank = {i: r for r, i in enumerate(dense, 1)}
         bm25_rank = {i: r for r, i in enumerate(keyword, 1)}
@@ -133,8 +142,11 @@ def main(argv: list[str] | None = None) -> int:
 
     retriever = Retriever.load()
     kinds = ("text",) if args.text_only else ("text", "note")
-    for number, result in enumerate(retriever.search(args.question, args.k, args.method, kinds), 1):
-        print(format_result(number, result) + "\n")
+    try:
+        for number, result in enumerate(retriever.search(args.question, args.k, args.method, kinds), 1):
+            print(format_result(number, result) + "\n")
+    finally:
+        retriever.close()
     return 0
 
 

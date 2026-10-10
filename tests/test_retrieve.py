@@ -3,7 +3,7 @@ import pytest
 
 from src import config
 from src.chunk import Chunk, embedding_text
-from src.index import StaleIndexError, load_index, save_index
+from src.index import COLLECTION, StaleIndexError, open_index, save_index
 from src.retrieve import Retriever, citation, format_result
 
 WORDS = ["fever", "cough", "youth", "honey", "longevity", "thirst"]
@@ -45,11 +45,20 @@ CHUNKS = [
 ]
 
 
+def build_index(directory, chunks=CHUNKS, model="fake-model"):
+    vectors = FakeEmbedder().embed_passages([embedding_text(c) for c in chunks])
+    save_index(vectors, chunks, model, directory)
+    return vectors
+
+
 @pytest.fixture(scope="module")
-def retriever():
-    embedder = FakeEmbedder()
-    vectors = embedder.embed_passages([embedding_text(c) for c in CHUNKS])
-    return Retriever(CHUNKS, vectors, embedder)
+def retriever(tmp_path_factory):
+    """A real Qdrant database in a temporary folder, filled with the fake vectors."""
+    directory = tmp_path_factory.mktemp("index")
+    build_index(directory)
+    result = Retriever(CHUNKS, open_index(CHUNKS, "fake-model", directory), FakeEmbedder())
+    yield result
+    result.close()
 
 
 def ids(results):
@@ -106,24 +115,42 @@ def test_citation_falls_back_to_scan_pages():
     assert citation(chunk(1, "x", printed=(), scan=(11,))).endswith(", scan p. 11")
 
 
-# --- the saved index ----------------------------------------------------------
+# --- the vector database ----------------------------------------------------
 
-def test_index_round_trip(tmp_path):
-    vectors = FakeEmbedder().embed_passages([embedding_text(c) for c in CHUNKS])
-    save_index(vectors, CHUNKS, "fake-model", tmp_path)
-    assert np.allclose(load_index(CHUNKS, "fake-model", tmp_path), vectors)
+def test_each_chunk_is_stored_as_a_point_with_its_vector_and_fields(tmp_path):
+    vectors = build_index(tmp_path)
+    store = open_index(CHUNKS, "fake-model", tmp_path)
+    try:
+        assert store.count(COLLECTION).count == len(CHUNKS)
+        [point] = store.retrieve(COLLECTION, ids=[3], with_vectors=True)
+        assert np.allclose(point.vector, vectors[3], atol=1e-6)
+        assert point.payload["chunk_id"] == "sutra-01-note-004"
+        assert point.payload["kind"] == "note"
+        assert point.payload["text"] == CHUNKS[3].text
+    finally:
+        store.close()
+
+
+def test_rebuilding_replaces_the_old_collection(tmp_path):
+    build_index(tmp_path, chunks=CHUNKS[:2])
+    build_index(tmp_path)
+    store = open_index(CHUNKS, "fake-model", tmp_path)
+    try:
+        assert store.count(COLLECTION).count == len(CHUNKS)
+    finally:
+        store.close()
 
 
 def test_index_built_from_other_chunks_is_refused(tmp_path):
-    vectors = FakeEmbedder().embed_passages([embedding_text(c) for c in CHUNKS])
-    save_index(vectors, CHUNKS, "fake-model", tmp_path)
+    build_index(tmp_path)
     changed = CHUNKS[:-1] + [chunk(4, "Edited note text.", kind="note")]
     with pytest.raises(StaleIndexError, match="Chunks changed"):
-        load_index(changed, "fake-model", tmp_path)
+        open_index(changed, "fake-model", tmp_path)
     with pytest.raises(StaleIndexError, match="built with"):
-        load_index(CHUNKS, "another-model", tmp_path)
+        open_index(CHUNKS, "another-model", tmp_path)
+    open_index(CHUNKS, "fake-model", tmp_path).close()   # a refusal leaves the database usable
 
 
 def test_missing_index_is_reported(tmp_path):
     with pytest.raises(StaleIndexError, match="python -m src.index"):
-        load_index(CHUNKS, "fake-model", tmp_path / "nothing-here")
+        open_index(CHUNKS, "fake-model", tmp_path / "nothing-here")
