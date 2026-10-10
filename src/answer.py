@@ -63,6 +63,8 @@ NOTES_WARNING = ("Note: parts of this answer come from the translator's notes "
                  "(A. C. Kaviratna), not from the Charaka Samhita itself.")
 DISCLAIMER = ("Educational use only, not medical advice. It does not diagnose or recommend "
               "treatment. Consult a qualified practitioner.")
+UNCITED_WARNING = ("Warning: the model cited no passage, so this answer cannot be checked "
+                   "against the text. Treat it with caution.")
 
 # A citation group: "[S1]", "[S1, N2]", and the other forms gpt-oss writes
 # (seen in the answer evaluation): "【S1】", "【S1†L3-L5】", "(S3)", "[{S5}]".
@@ -175,10 +177,11 @@ class Answerer:
         self.k = k
         self.rewrite = rewrite
 
-    def ask(self, question: str) -> Answer:
+    def ask(self, question: str, kinds: tuple[str, ...] = ("text", "note")) -> Answer:
+        """kinds=("text",) answers from Charaka's text only, without translator's notes."""
         question = " ".join(question.split())
         query = rewrite_query(self.llm, question) if self.rewrite else question
-        passages = label_passages(self.retriever.search(query, k=self.k))
+        passages = label_passages(self.retriever.search(query, k=self.k, kinds=kinds))
         if not passages:
             return Answer(question, False, NOT_COVERED_REPLY, [], [], search_query=query)
 
@@ -192,8 +195,7 @@ class Answerer:
 def format_answer(answer: Answer) -> str:
     lines = [answer.text]
     if answer.found and not answer.sources:
-        lines.append("Warning: the model cited no passage, so this answer cannot be checked "
-                     "against the text. Treat it with caution.")
+        lines.append(UNCITED_WARNING)
     if answer.uses_notes:
         lines.append(NOTES_WARNING)
     if answer.sources:

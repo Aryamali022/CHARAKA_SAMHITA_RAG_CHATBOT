@@ -50,3 +50,14 @@ LLM_BASE_URL = os.environ.get("LLM_BASE_URL", "https://integrate.api.nvidia.com/
 LLM_MODEL = os.environ.get("LLM_MODEL", "openai/gpt-oss-20b")
 UNANSWERABLE_QUESTIONS_PATH = DATA_DIR / "eval" / "unanswerable_questions.jsonl"
 ANSWER_EVAL_PATH = PROCESSED_DIR / "answer_eval.jsonl"
+
+# --- Backend server (Phase 6) ---
+# With QDRANT_URL set (e.g. http://localhost:6333, see docker-compose.yml) the
+# programs use the Qdrant server; without it, the embedded database in
+# storage/index/qdrant/ (one program at a time).
+QDRANT_URL = os.environ.get("QDRANT_URL") or None
+QDRANT_API_KEY = os.environ.get("QDRANT_API_KEY") or None
+API_HOST = os.environ.get("API_HOST", "127.0.0.1")
+API_PORT = int(os.environ.get("API_PORT", "8000"))
+# Browser pages allowed to call the API (the React dev server in Phase 7).
+API_CORS_ORIGINS = os.environ.get("API_CORS_ORIGINS", "http://localhost:5173").split(",")

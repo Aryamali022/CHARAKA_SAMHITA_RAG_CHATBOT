@@ -10,7 +10,7 @@ from __future__ import annotations
 import argparse
 
 from src.answer import Answerer, format_answer
-from src.index import StaleIndexError
+from src.index import IndexNotReadyError
 from src.llm import LLM, LLMError
 from src.retrieve import Retriever, format_result
 
@@ -40,7 +40,7 @@ def main(argv: list[str] | None = None) -> int:
     try:
         llm = LLM()
         retriever = Retriever.load()
-    except (LLMError, StaleIndexError) as error:
+    except (LLMError, IndexNotReadyError) as error:
         print(error)
         return 1
 

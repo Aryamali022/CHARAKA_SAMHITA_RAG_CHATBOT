@@ -30,11 +30,13 @@ does not contain an answer.
     python -m src.ingest              # -> data/processed/pages.jsonl + quality report
     python -m src.structure           # -> data/processed/lesson_pages.jsonl + structure.json
     python -m src.chunk               # -> data/processed/chunks.jsonl
-    python -m src.index               # -> storage/index/qdrant/ (vector DB, ~5-10 min on CPU)
+    docker compose up -d qdrant       # start the vector database server (Phase 6)
+    python -m src.index               # -> Qdrant collection (~5-10 min on CPU)
     python -m src.retrieve "What urges should not be suppressed?"
     python -m scripts.eval_retrieval  # search quality on data/eval/retrieval_questions.jsonl
     python -m src.chat                # ask questions (needs NVIDIA_API_KEY in .env)
     python -m scripts.eval_answers    # answer quality, incl. questions the book cannot answer
+    python -m src.api                 # backend server: http://localhost:8000/docs
 
 **Structure (Phase 2).** The translation prints the divisions in this order:
 Sutra, Vimana, Sharira, Indriya, Nidana, Chikitsa (lessons I–XXII), 88 lessons
@@ -103,6 +105,20 @@ on the 52 questions it raised hit@5 for everyday wording from 70% to 90% but
 lowered it slightly for questions in the book's own terms (100% to 98%), and it
 doubles the waiting time.
 
+**Backend server (Phase 6).** Two services run as servers:
+- *Qdrant* in Docker (`docker-compose.yml`, port 6333, reachable from this
+  computer only). Its data lives in the Docker volume `qdrant_data`. With
+  `QDRANT_URL` set in `.env`, every program (API, chat, evaluation scripts)
+  connects to it, several at once. Without `QDRANT_URL` the embedded
+  database is used, one program at a time; the tests always use a temporary
+  embedded database. `python -m src.index --from-embedded` copies an existing
+  embedded index to the server without embedding again.
+- *The API* (`src/api.py`, FastAPI on port 8000) over the chatbot:
+  `GET /api/health`, `POST /api/search`, `POST /api/ask`. Interactive docs at
+  `/docs`. The answer rules of Phase 5 apply unchanged; the NVIDIA key stays
+  on the server. Requests run in parallel; browser pages from
+  `http://localhost:5173` (the React dev server, Phase 7) may call it.
+
 ## Setup (Windows / PowerShell)
 
     py -3.11 -m venv .venv
@@ -118,3 +134,4 @@ Phase 2 — sthana / lesson structure.
 Phase 3 — chunking.
 Phase 4 — embeddings, Qdrant vector database and hybrid search.
 Phase 5 — answers with citations (gpt-oss-20b via NVIDIA).
+Phase 6 — backend server: Qdrant in Docker and a FastAPI web API.

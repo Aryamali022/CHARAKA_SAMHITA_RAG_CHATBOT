@@ -1,0 +1,20 @@
+# Backend services (Phase 6).
+#   Start the vector database:   docker compose up -d qdrant
+#   Stop it:                     docker compose stop qdrant
+# Then fill it once (python -m src.index) and start the API (python -m src.api).
+services:
+  qdrant:
+    image: qdrant/qdrant:v1.19.0
+    container_name: charaka-qdrant
+    ports:
+      # Bound to 127.0.0.1: reachable from this computer only, not from the network.
+      - "127.0.0.1:6333:6333"   # REST API, and the dashboard at http://localhost:6333/dashboard
+      - "127.0.0.1:6334:6334"   # gRPC
+    volumes:
+      # A Docker-managed volume: the data survives restarts, and Qdrant gets the
+      # POSIX file system it needs (a Windows folder mount can corrupt it).
+      - qdrant_data:/qdrant/storage
+    restart: unless-stopped
+
+volumes:
+  qdrant_data:

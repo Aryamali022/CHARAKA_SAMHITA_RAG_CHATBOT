@@ -20,6 +20,7 @@ Run:  python -m src.retrieve "What urges should not be suppressed?"
 from __future__ import annotations
 
 import argparse
+import threading
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -80,15 +81,16 @@ class Retriever:
 
     @classmethod
     def load(cls, chunks_path: Path = config.CHUNKS_PATH, index_dir: Path = config.INDEX_DIR,
-             embedder=None) -> "Retriever":
+             url: str | None = config.QDRANT_URL, embedder=None) -> "Retriever":
+        """The retriever the programs use: the Qdrant server if QDRANT_URL is set."""
         if embedder is None:
             from src.embedder import Embedder
             embedder = Embedder()
         chunks = load_chunks(chunks_path)
-        return cls(chunks, open_index(chunks, embedder.model_name, index_dir), embedder)
+        return cls(chunks, open_index(chunks, embedder.model_name, index_dir, url), embedder)
 
     def close(self) -> None:
-        """Release the database (only one process can open it at a time)."""
+        """Release the database connection (an embedded database allows one program at a time)."""
         self.store.close()
 
     def search(self, question: str, k: int = 5, method: str = "hybrid",
@@ -118,6 +120,23 @@ class Retriever:
                 fused[i] = fused.get(i, 0.0) + 1 / (RRF_K + rank)
         best = sorted(fused, key=lambda i: (-fused[i], i))[:k]
         return [Result(self.chunks[i], fused[i], dense_rank.get(i), bm25_rank.get(i)) for i in best]
+
+
+class SerialSearch:
+    """Lets threads (API requests, parallel evaluation) share one retriever.
+
+    Searches run one at a time: they take milliseconds, and the embedded
+    database and the embedder are not meant to be shared between threads. The
+    slow part, the answer model, runs outside and in parallel.
+    """
+
+    def __init__(self, retriever: Retriever):
+        self.retriever = retriever
+        self._lock = threading.Lock()
+
+    def search(self, *args, **kwargs) -> list[Result]:
+        with self._lock:
+            return self.retriever.search(*args, **kwargs)
 
 
 def format_result(number: int, result: Result, preview: int = 300) -> str:

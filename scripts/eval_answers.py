@@ -22,29 +22,14 @@ from __future__ import annotations
 
 import argparse
 import json
-import threading
 from concurrent.futures import ThreadPoolExecutor
 
 from src import config
 from src.answer import Answerer
 from src.llm import LLM, LLMError
-from src.retrieve import Retriever
+from src.retrieve import Retriever, SerialSearch
 
 WORKERS = 8     # questions answered in parallel (the model API is the slow part)
-
-
-class OneSearchAtATime:
-    """Lets threads share the retriever: searches run one at a time (the local
-    Qdrant database and the embedder are not shared between threads), while
-    the slow model calls run in parallel."""
-
-    def __init__(self, retriever: Retriever):
-        self._retriever = retriever
-        self._lock = threading.Lock()
-
-    def search(self, *args, **kwargs):
-        with self._lock:
-            return self._retriever.search(*args, **kwargs)
 
 
 def load(path) -> list[dict]:
@@ -77,7 +62,7 @@ def main(argv: list[str] | None = None) -> int:
     answerable = load(config.EVAL_QUESTIONS_PATH)[:args.limit]
     unanswerable = load(config.UNANSWERABLE_QUESTIONS_PATH)[:args.limit]
     retriever = Retriever.load()
-    answerer = Answerer(OneSearchAtATime(retriever), LLM(), rewrite=args.rewrite)
+    answerer = Answerer(SerialSearch(retriever), LLM(), rewrite=args.rewrite)
     questions = answerable + unanswerable
     records = []
     try:

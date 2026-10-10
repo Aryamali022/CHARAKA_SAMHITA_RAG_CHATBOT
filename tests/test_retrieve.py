@@ -151,6 +151,12 @@ def test_index_built_from_other_chunks_is_refused(tmp_path):
     open_index(CHUNKS, "fake-model", tmp_path).close()   # a refusal leaves the database usable
 
 
+def test_unreachable_qdrant_server_gives_a_clear_error():
+    from src.index import QdrantUnavailableError
+    with pytest.raises(QdrantUnavailableError, match="docker compose up -d qdrant"):
+        open_index(CHUNKS, "fake-model", url="http://127.0.0.1:1")   # nothing listens on port 1
+
+
 def test_missing_index_is_reported(tmp_path):
     with pytest.raises(StaleIndexError, match="python -m src.index"):
         open_index(CHUNKS, "fake-model", tmp_path / "nothing-here")
