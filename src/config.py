@@ -3,6 +3,7 @@
 Every other module imports paths from here instead of hard-coding them,
 so moving a folder means changing one line.
 """
+import os
 from pathlib import Path
 
 from dotenv import load_dotenv
@@ -42,3 +43,10 @@ CHUNKS_PATH = PROCESSED_DIR / "chunks.jsonl"
 MODELS_DIR = STORAGE_DIR / "models"                 # downloaded embedding model
 INDEX_DIR = STORAGE_DIR / "index"                   # chunk embeddings + metadata
 EVAL_QUESTIONS_PATH = DATA_DIR / "eval" / "retrieval_questions.jsonl"
+
+# --- Answer model (Phase 5) ---
+# Any OpenAI-compatible endpoint; the API key is read from NVIDIA_API_KEY in .env.
+LLM_BASE_URL = os.environ.get("LLM_BASE_URL", "https://integrate.api.nvidia.com/v1")
+LLM_MODEL = os.environ.get("LLM_MODEL", "openai/gpt-oss-20b")
+UNANSWERABLE_QUESTIONS_PATH = DATA_DIR / "eval" / "unanswerable_questions.jsonl"
+ANSWER_EVAL_PATH = PROCESSED_DIR / "answer_eval.jsonl"

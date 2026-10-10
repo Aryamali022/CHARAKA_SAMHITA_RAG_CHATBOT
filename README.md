@@ -33,6 +33,8 @@ does not contain an answer.
     python -m src.index               # -> storage/index/qdrant/ (vector DB, ~5-10 min on CPU)
     python -m src.retrieve "What urges should not be suppressed?"
     python -m scripts.eval_retrieval  # search quality on data/eval/retrieval_questions.jsonl
+    python -m src.chat                # ask questions (needs NVIDIA_API_KEY in .env)
+    python -m scripts.eval_answers    # answer quality, incl. questions the book cannot answer
 
 **Structure (Phase 2).** The translation prints the divisions in this order:
 Sutra, Vimana, Sharira, Indriya, Nidana, Chikitsa (lessons I–XXII), 88 lessons
@@ -75,6 +77,32 @@ citation and whether it is Charaka's text or a translator's note.
 `scripts/eval_retrieval.py` measures hit@1, hit@5 and MRR for each method on
 52 questions whose answering lessons were checked by hand.
 
+**Answers (Phase 5).** `src/chat.py` answers with `openai/gpt-oss-20b` through
+NVIDIA's OpenAI-compatible API (`src/llm.py`; key in `.env` as
+`NVIDIA_API_KEY`, model and endpoint in `src/config.py`). The question and the
+retrieved passages are sent to NVIDIA's servers. For each question
+(`src/answer.py`):
+1. The top 6 passages are labelled S1, S2, ... (Charaka's text) and N1, N2, ...
+   (translator's notes) and given to the model, which must answer only from
+   them, cite labels, and reply `NOT_IN_TEXT` when they do not answer it.
+2. The code then enforces the rules: citations to passages that were not given
+   are removed, "not in text" becomes a standard reply, a note is always added
+   when a translator's note is cited, and every reply ends with the
+   not-medical-advice disclaimer.
+
+`scripts/eval_answers.py` runs the 52 answerable questions plus 10 the book
+cannot answer (COVID-19, insulin doses, chemotherapy, ...). Latest run: 51/52
+answered, 49/52 citing a passage from a correct lesson (48 in the run; q04's
+answer key was then corrected, as its answer was right), 0 uncited answers,
+0 invented citations, and 10/10 unanswerable questions refused. The three
+misses are everyday-wording questions where search did not find the lesson.
+
+`--rewrite` first asks the model for the translation's likely vocabulary
+(e.g. "insanity lunacy madness" for "lose their mind"). It is off by default:
+on the 52 questions it raised hit@5 for everyday wording from 70% to 90% but
+lowered it slightly for questions in the book's own terms (100% to 98%), and it
+doubles the waiting time.
+
 ## Setup (Windows / PowerShell)
 
     py -3.11 -m venv .venv
@@ -89,3 +117,4 @@ Phase 1 — source verification and page ingestion.
 Phase 2 — sthana / lesson structure.
 Phase 3 — chunking.
 Phase 4 — embeddings, Qdrant vector database and hybrid search.
+Phase 5 — answers with citations (gpt-oss-20b via NVIDIA).

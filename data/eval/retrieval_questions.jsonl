@@ -1,7 +1,7 @@
 {"id": "q01", "style": "direct", "question": "Which natural urges should never be suppressed?", "lessons": [["sutra", 7]]}
 {"id": "q02", "style": "direct", "question": "What are the three desires that every person should pursue?", "lessons": [["sutra", 11]]}
 {"id": "q03", "style": "direct", "question": "How many bones are there in the human body?", "lessons": [["sharira", 7]]}
-{"id": "q04", "style": "direct", "question": "What are the ten seats of life in the body?", "lessons": [["sutra", 29]]}
+{"id": "q04", "style": "direct", "question": "What are the ten seats of life in the body?", "lessons": [["sutra", 29], ["sharira", 7]], "note": "Sharira 7 added after review: it also lists the ten seats of the life-breaths"}
 {"id": "q05", "style": "direct", "question": "How should a person divide the stomach when taking a meal?", "lessons": [["vimana", 2]]}
 {"id": "q06", "style": "direct", "question": "What causes epidemics that destroy cities and towns?", "lessons": [["vimana", 3]]}
 {"id": "q07", "style": "direct", "question": "Which dreams foretell death?", "lessons": [["indriya", 5]]}

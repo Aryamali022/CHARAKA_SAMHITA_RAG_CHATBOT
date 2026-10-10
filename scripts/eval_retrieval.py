@@ -20,6 +20,7 @@ from src import config
 from src.retrieve import METHODS, Retriever, citation
 
 DEPTH = 10
+WORKERS = 8     # parallel calls to the answer model when rewriting
 
 
 def load_questions(path=config.EVAL_QUESTIONS_PATH) -> list[dict]:
@@ -46,16 +47,30 @@ def score(ranks: list[int | None]) -> tuple[float, float, float]:
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     parser.add_argument("--misses", action="store_true", help="list questions hybrid search misses")
+    parser.add_argument("--rewrite", action="store_true",
+                        help="rewrite each question with the answer model before searching (Phase 5)")
     args = parser.parse_args(argv)
 
     questions = load_questions()
+    if args.rewrite:
+        from concurrent.futures import ThreadPoolExecutor
+
+        from src.answer import rewrite_query
+        from src.llm import LLM
+        llm = LLM()
+        with ThreadPoolExecutor(max_workers=WORKERS) as pool:   # API calls in parallel
+            queries = pool.map(lambda q: rewrite_query(llm, q["question"]), questions)
+            for number, (q, query) in enumerate(zip(questions, queries), 1):
+                q["query"] = query
+                print(f"\rRewriting questions: {number}/{len(questions)}", end="", flush=True)
+        print("\n")
     retriever = Retriever.load()
     ranks = {m: [] for m in METHODS}
     top = {}
     try:
         for q in questions:
             for method in METHODS:
-                results = retriever.search(q["question"], k=DEPTH, method=method)
+                results = retriever.search(q.get("query", q["question"]), k=DEPTH, method=method)
                 ranks[method].append(first_correct_rank(results, q["lessons"]))
                 if method == "hybrid":
                     top[q["id"]] = results[0]
